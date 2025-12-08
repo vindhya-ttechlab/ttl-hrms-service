@@ -91,6 +91,7 @@ public class UserService
         user.setLanguages(createUserRequest.getLanguages());
         user.setAchievement(createUserRequest.getAchievement());
         user.setStatus(Users.Status.Active);
+        user.setIsFirstLogin(true); // New users must change password on first login
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         
@@ -172,6 +173,7 @@ public class UserService
         loginResponse.setRoles(userRoles);
         loginResponse.setRoleIds(userRoleIds);
         loginResponse.setPrimaryRoleId(primaryRoleId);
+        loginResponse.setIsFirstLogin(users.getIsFirstLogin() != null ? users.getIsFirstLogin() : true);
 
         return loginResponse;
     }
@@ -412,5 +414,46 @@ public class UserService
         }
 
         return employeeDetailsList;
+    }
+
+    /**
+     * Change user password (for first-time login or regular password change)
+     * @param userId The user ID
+     * @param changePasswordRequest The change password request
+     * @return true if password changed successfully
+     */
+    public boolean changePassword(Integer userId, ChangePasswordRequest changePasswordRequest) {
+        log.info("Changing password for user ID: {}", userId);
+        
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // Validate current password if it's not first login
+        if (user.getIsFirstLogin() == null || !user.getIsFirstLogin()) {
+            if (changePasswordRequest.getCurrentPassword() == null || 
+                !passwordEncoder.matches(changePasswordRequest.getCurrentPassword(), user.getPassword())) {
+                throw new RuntimeException("Current password is incorrect");
+            }
+        }
+        
+        // Validate new password and confirm password match
+        if (!changePasswordRequest.getNewPassword().equals(changePasswordRequest.getConfirmPassword())) {
+            throw new RuntimeException("New password and confirm password do not match");
+        }
+        
+        // Validate password strength (minimum 8 characters)
+        if (changePasswordRequest.getNewPassword().length() < 8) {
+            throw new RuntimeException("Password must be at least 8 characters long");
+        }
+        
+        // Update password
+        user.setPassword(passwordEncoder.encode(changePasswordRequest.getNewPassword()));
+        user.setIsFirstLogin(false); // Mark that user has changed password
+        user.setUpdatedAt(LocalDateTime.now());
+        
+        userRepository.save(user);
+        log.info("Password changed successfully for user ID: {}", userId);
+        
+        return true;
     }
 }

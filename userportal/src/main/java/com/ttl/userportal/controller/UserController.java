@@ -24,9 +24,15 @@ public class UserController
     private UserService userService;
 
     @PostMapping("/create-user")
-    public ResponseEntity<Map<String, Object>> createUser(@RequestBody CreateUserRequest createUserRequest) {
+    public ResponseEntity<Map<String, Object>> createUser(
+            @ModelAttribute CreateUserRequest createUserRequest) {
         Map<String, Object> response = new HashMap<>();
         try {
+            if (createUserRequest == null) {
+                response.put("error", "Request body is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
             Users createdUser = userService.createUser(createUserRequest);
             response.put("message", "User created successfully");
             response.put("userId", createdUser.getId());
@@ -79,6 +85,36 @@ public class UserController
             return userService.getAllEmployees();
         } else {
             return userService.searchEmployees(search.trim());
+        }
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, Object>> changePassword(
+            @RequestBody ChangePasswordRequest changePasswordRequest,
+            @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (userDetails == null || userDetails.getUser_id() == null) {
+                response.put("error", "User not authenticated");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            boolean success = userService.changePassword(
+                    userDetails.getUser_id().intValue(), 
+                    changePasswordRequest);
+            
+            if (success) {
+                response.put("message", "Password changed successfully");
+                response.put("success", true);
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("error", "Failed to change password");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+            response.put("success", false);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
     }
 }

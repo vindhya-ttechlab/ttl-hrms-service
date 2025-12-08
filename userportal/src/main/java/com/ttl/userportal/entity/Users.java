@@ -107,4 +107,7 @@ public class Users {
     @Column(name="achievement")
     private String achievement;
 
+    @Column(name = "is_first_login", nullable = false)
+    private Boolean isFirstLogin = true; // Default to true for new users
+
 }
