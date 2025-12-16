@@ -12,8 +12,6 @@ import java.time.LocalDateTime;
 public class LeaveApprovalDTO {
     private Long approvalId;
     private Long leaveId;
-    private Integer workflowId;
-    private Integer stepId;
     private Integer approverId;
     private String approverName;
     private String approvalStatus; // "PENDING", "APPROVED", "REJECTED"

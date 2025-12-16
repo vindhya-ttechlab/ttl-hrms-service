@@ -1,13 +1,13 @@
 package com.ttl.userportal.controller;
 
 import com.ttl.userportal.config.CurrentUser;
-import com.ttl.userportal.config.RequiresPermission;
 import com.ttl.userportal.dto.LeaveTypeDTO;
 import com.ttl.userportal.service.LeaveTypeService;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -23,7 +23,7 @@ public class LeaveTypeController {
     private LeaveTypeService leaveTypeService;
     
     @GetMapping
-    @RequiresPermission(permission = "VIEW", resource = "LEAVE_TYPE")
+    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> getAllLeaveTypes(
             @RequestParam(required = false) Boolean includeInactive,
             @CurrentUser UserDetails userDetails) {
@@ -46,7 +46,7 @@ public class LeaveTypeController {
     }
     
     @GetMapping("/{id}")
-    @RequiresPermission(permission = "VIEW", resource = "LEAVE_TYPE")
+    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> getLeaveTypeById(
             @PathVariable Integer id,
             @CurrentUser UserDetails userDetails) {
@@ -64,7 +64,7 @@ public class LeaveTypeController {
     }
     
     @PostMapping
-    @RequiresPermission(permission = "WRITE", resource = "LEAVE_TYPE")
+    @PreAuthorize("hasPermission('WRITE', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> createLeaveType(
             @RequestBody LeaveTypeDTO dto,
             @CurrentUser UserDetails userDetails) {
@@ -82,7 +82,7 @@ public class LeaveTypeController {
     }
     
     @PutMapping("/{id}")
-    @RequiresPermission(permission = "WRITE", resource = "LEAVE_TYPE")
+    @PreAuthorize("hasPermission('EDIT', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> updateLeaveType(
             @PathVariable Integer id, 
             @RequestBody LeaveTypeDTO dto,
@@ -101,13 +101,29 @@ public class LeaveTypeController {
     }
     
     @DeleteMapping("/{id}")
-    @RequiresPermission(permission = "WRITE", resource = "LEAVE_TYPE")
+    @PreAuthorize("hasPermission('WRITE', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> deleteLeaveType(
             @PathVariable Integer id,
             @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             leaveTypeService.deleteLeaveType(id);
+            response.put("message", "Leave type deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+            response.put("message", "Failed to delete leave type");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+
+    @GetMapping("/get-user-leave-details")
+    public ResponseEntity<Map<String,Object>>getLeaveDetailsForUser(@CurrentUser UserDetails userDetails )
+    {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            leaveTypeService.getLeaveBalanceDetailsForUser(userDetails);
             response.put("message", "Leave type deleted successfully");
             return ResponseEntity.ok(response);
         } catch (Exception e) {

@@ -28,8 +28,8 @@ public class LeaveEntity
     @Column(name = "type")
     private String type;
 
-    @Column(name = "user_id")
-    private Integer userId;
+    @Column(name = "employee_id")
+    private Integer employeeId;
 
     @Column(name="approver")
     private Integer approver;

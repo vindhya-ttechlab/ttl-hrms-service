@@ -13,8 +13,8 @@ public class LeaveRequestDTO
     private String toDate;
     private String reason;
     private String type;
-    private Integer userId;  // Keep as Integer for database compatibility
-    private String userName; // Add userName field for user identification
+    private Integer employeeId;  // Employee ID instead of user ID
+    private String employeeName; // Employee name for identification
     private Integer approver;
     private LocalDateTime approvedDate;
     private LocalDateTime appliedDate;

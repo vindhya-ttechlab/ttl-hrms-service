@@ -3,11 +3,13 @@ package com.ttl.userportal.controller;
 import com.ttl.userportal.config.CurrentUser;
 import com.ttl.userportal.dto.*;
 import com.ttl.userportal.entity.Users;
+import com.ttl.userportal.service.PrivilegeService;
 import com.ttl.userportal.service.UserService;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -22,6 +24,9 @@ public class UserController
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private PrivilegeService privilegeService;
 
     @PostMapping("/create-user")
     public ResponseEntity<Map<String, Object>> createUser(
@@ -115,6 +120,70 @@ public class UserController
             response.put("error", e.getMessage());
             response.put("success", false);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+    /**
+     * Check if user has a specific permission for a resource
+     * Used by frontend to determine UI visibility
+     * Protected with Spring Security - user must be authenticated
+     */
+    @RequestMapping(value = "/api/permissions/check", method = RequestMethod.GET)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> checkPermission(
+            @RequestParam String permission,
+            @RequestParam String resource,
+            @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (userDetails == null) {
+                response.put("hasPermission", false);
+                response.put("error", "User not authenticated");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            boolean hasPermission = privilegeService.hasPrivilege(
+                    userDetails.getUser_id().intValue(), permission, resource);
+            
+            response.put("hasPermission", hasPermission);
+            response.put("permission", permission);
+            response.put("resource", resource);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("hasPermission", false);
+            response.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * Get all permissions for a user for a specific resource
+     * Used by frontend to determine UI visibility
+     * Protected with Spring Security - user must be authenticated
+     */
+    @RequestMapping(value = "/api/permissions/resource/{resource}", method = RequestMethod.GET)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> getUserPermissionsForResource(
+            @PathVariable String resource,
+            @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (userDetails == null) {
+                response.put("error", "User not authenticated");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            List<String> permissions = privilegeService.getUserPrivilegesForResource(
+                    userDetails.getUser_id().intValue(), resource);
+
+            response.put("data", permissions);
+            response.put("resource", resource);
+            response.put("message", "Permissions retrieved successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+            response.put("message", "Failed to retrieve permissions");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 }

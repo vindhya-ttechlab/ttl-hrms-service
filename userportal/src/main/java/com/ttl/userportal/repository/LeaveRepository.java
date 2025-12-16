@@ -10,15 +10,15 @@ import java.util.List;
 
 public interface LeaveRepository extends JpaRepository<LeaveEntity,Long>
 {
-    @Query("SELECT l FROM LeaveEntity l WHERE l.fromDate > :today AND userId=:userId")
-    List<LeaveEntity> listOfUpcomingLeaves(@Param("today") LocalDate today,@Param("userId")Integer userId);
+    @Query("SELECT l FROM LeaveEntity l WHERE l.fromDate > :today AND l.employeeId = :employeeId")
+    List<LeaveEntity> listOfUpcomingLeaves(@Param("today") LocalDate today, @Param("employeeId") Integer employeeId);
 
-    @Query("SELECT l FROM LeaveEntity l WHERE l.fromDate <= :today AND userId=:userId")
-    List<LeaveEntity> listOfPastLeaves(@Param("today") LocalDate today,@Param("userId")Integer userId);
+    @Query("SELECT l FROM LeaveEntity l WHERE l.fromDate <= :today AND l.employeeId = :employeeId")
+    List<LeaveEntity> listOfPastLeaves(@Param("today") LocalDate today, @Param("employeeId") Integer employeeId);
 
-    LeaveEntity findByIdAndIsActive(Long id,boolean status);
+    LeaveEntity findByIdAndIsActive(Long id, boolean status);
 
-    @Query("SELECT l FROM LeaveEntity l WHERE YEAR(l.fromDate) = :year AND l.userId = :userId")
-    List<LeaveEntity> findByApprover(@Param("year") int year, @Param("userId") Integer userId);
+    @Query("SELECT l FROM LeaveEntity l WHERE YEAR(l.fromDate) = :year AND l.approver = :approverId")
+    List<LeaveEntity> findByApprover(@Param("year") int year, @Param("approverId") Integer approverId);
 
 }

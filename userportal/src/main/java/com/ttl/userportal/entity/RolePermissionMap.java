@@ -47,6 +47,6 @@ public class RolePermissionMap {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "permission_id", insertable = false, updatable = false)
-    private Permission permission;
+    private Privilege privilege;
 }
 

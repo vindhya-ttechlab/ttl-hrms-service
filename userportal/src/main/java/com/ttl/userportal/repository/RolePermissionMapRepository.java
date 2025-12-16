@@ -17,13 +17,13 @@ public interface RolePermissionMapRepository extends JpaRepository<RolePermissio
     
     @Query("SELECT rpm.permissionId FROM RolePermissionMap rpm " +
            "WHERE rpm.roleId IN :roleIds AND rpm.isActive = true")
-    List<Integer> findPermissionIdsByRoleIds(@Param("roleIds") List<Integer> roleIds);
+    List<Integer> findPrivilegeIdsByRoleIds(@Param("roleIds") List<Integer> roleIds);
     
-    @Query("SELECT p.permissionName FROM Permission p " +
-           "INNER JOIN RolePermissionMap rpm ON p.permissionId = rpm.permissionId " +
+    @Query("SELECT p.privilegeName FROM Privilege p " +
+           "INNER JOIN RolePermissionMap rpm ON p.privilegeId = rpm.permissionId " +
            "WHERE rpm.roleId IN :roleIds AND rpm.isActive = true AND p.isActive = true " +
            "AND p.resource = :resource")
-    List<String> findPermissionNamesByRoleIdsAndResource(
+    List<String> findPrivilegeNamesByRoleIdsAndResource(
             @Param("roleIds") List<Integer> roleIds, 
             @Param("resource") String resource);
     

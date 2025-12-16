@@ -2,12 +2,15 @@ package com.ttl.userportal.service;
 
 import com.ttl.userportal.dto.*;
 import com.ttl.userportal.entity.BankDetails;
+import com.ttl.userportal.entity.Employee;
 import com.ttl.userportal.entity.Projects;
 import com.ttl.userportal.entity.Users;
 import com.ttl.userportal.entity.UserRoleMap;
 import com.ttl.userportal.entity.Role;
+import com.ttl.userportal.mapper.UserMapper;
 import com.ttl.userportal.repository.BankDetailsRepository;
 import com.ttl.userportal.repository.DocumentRepository;
+import com.ttl.userportal.repository.EmployeeRepository;
 import com.ttl.userportal.repository.ProjectRepository;
 import com.ttl.userportal.repository.UserRepository;
 import com.ttl.userportal.repository.UserRoleMapRepository;
@@ -15,9 +18,11 @@ import com.ttl.userportal.repository.RoleRepository;
 import com.ttl.userportal.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -57,62 +62,76 @@ public class UserService
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Value("${app.user.default.role.id:1}")
+    private Integer defaultRoleId;
+
+    @Value("${app.user.default.role.name:Employee}")
+    private String defaultRoleName;
 
 
+    @Autowired
+    private LeaveTypeService leaveTypeService;
+
+
+
+    @Transactional
     public Users createUser(CreateUserRequest createUserRequest) {
         log.info("Creating user: {}", createUserRequest.getEmail());
         
-        // Check if user already exists
         Users existingUser = userRepository.findByEmail(createUserRequest.getEmail());
         if (existingUser != null) {
             throw new RuntimeException("User with email " + createUserRequest.getEmail() + " already exists");
         }
+        Employee existingEmployee = employeeRepository.findByEmail(createUserRequest.getEmail()).orElse(null);
+        if (existingEmployee != null) {
+            throw new RuntimeException("Employee with email " + createUserRequest.getEmail() + " already exists");
+        }
+        String encodedPassword = passwordEncoder.encode(createUserRequest.getPassword());
         
-        // Create new user
-        Users user = new Users();
-        user.setEmpCode(createUserRequest.getEmpCode());
-        user.setName(createUserRequest.getName());
-        user.setEmail(createUserRequest.getEmail());
-        user.setPassword(passwordEncoder.encode(createUserRequest.getPassword()));
-        user.setPhone(createUserRequest.getPhone());
-        user.setLocation(createUserRequest.getLocation());
-        user.setDateOfBirth(createUserRequest.getDateOfBirth());
-        user.setEmergencyContact(createUserRequest.getEmergencyContact());
-        user.setEmergencyPhone(createUserRequest.getEmergencyPhone());
-        user.setAddress(createUserRequest.getAddress());
-        user.setPosition(createUserRequest.getPosition());
-        user.setDepartment(createUserRequest.getDepartment());
-        user.setJoinDate(createUserRequest.getJoinDate());
-        user.setExperience(createUserRequest.getExperience());
-        user.setEducation(createUserRequest.getEducation());
-        user.setTeam(createUserRequest.getTeam());
-        user.setManager(createUserRequest.getManager());
-        user.setSkills(createUserRequest.getSkills());
-        user.setLanguages(createUserRequest.getLanguages());
-        user.setAchievement(createUserRequest.getAchievement());
-        user.setStatus(Users.Status.Active);
-        user.setIsFirstLogin(true); // New users must change password on first login
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        Users user = userMapper.mapToUser(createUserRequest, encodedPassword);
         
-        // Save user first to get the generated ID
         Users savedUser = userRepository.save(user);
+        log.info("User saved with ID: {}", savedUser.getId());
         
-        // Assign default role (role_id = 1, which should be Employee)
-        assignDefaultRole(savedUser.getId());
+        Employee employee = userMapper.mapToEmployee(createUserRequest);
+        
+        Employee savedEmployee = employeeRepository.save(employee);
+        log.info("Employee saved with ID: {}", savedEmployee.getEmployeeId());
+        
+        List<Integer> existingRoleIds = userRoleMapRepository.findActiveRoleIdsByUserId(savedUser.getId());
+        
+        if (existingRoleIds.isEmpty()) {
+            assignDefaultRoleFromProperties(savedUser.getId());
+        } else {
+            log.info("User {} already has {} roles assigned, skipping default role assignment", 
+                    savedUser.getId(), existingRoleIds.size());
+        }
+
+        leaveTypeService.getOrCreateBalance(savedEmployee.getEmployeeId());
         
         return savedUser;
     }
 
-    /**
-     * Assign default role (Employee - role_id = 1) to a user
-     * @param userId The user ID
-     */
-    private void assignDefaultRole(Integer userId) {
+    private void assignDefaultRoleFromProperties(Integer userId) {
         try {
-            // Get default role (Employee with role_id = 1)
-            Role defaultRole = roleRepository.findById(1)
-                    .orElseThrow(() -> new RuntimeException("Default role (Employee) not found. Please ensure roles are initialized in the database."));
+            log.info("Assigning default role (ID: {}, Name: {}) to user ID: {}", defaultRoleId, defaultRoleName, userId);
+            
+            // Get default role from application properties
+            Role defaultRole = roleRepository.findById(defaultRoleId)
+                    .orElseThrow(() -> new RuntimeException(
+                        String.format("Default role with ID %d (%s) not found. Please ensure roles are initialized in the database.", 
+                                defaultRoleId, defaultRoleName)));
+            
+            if (!defaultRoleName.equals(defaultRole.getRoleName())) {
+                log.warn("Default role name mismatch: Expected '{}', but found '{}'. Using role ID {} anyway.", 
+                        defaultRoleName, defaultRole.getRoleName(), defaultRoleId);
+            }
             
             // Check if user already has this role
             if (!userRoleMapRepository.existsByUserIdAndRoleId(userId, defaultRole.getRoleId())) {
@@ -124,14 +143,14 @@ public class UserService
                 userRoleMap.setUpdatedAt(LocalDateTime.now());
                 
                 userRoleMapRepository.save(userRoleMap);
-                log.info("Assigned default role '{}' to user with ID: {}", defaultRole.getRoleName(), userId);
+                log.info("Assigned default role '{}' (ID: {}) to user with ID: {}", 
+                        defaultRole.getRoleName(), defaultRole.getRoleId(), userId);
             } else {
-                log.info("User with ID {} already has role '{}'", userId, defaultRole.getRoleName());
+                log.info("User with ID {} already has role '{}' (ID: {})", 
+                        userId, defaultRole.getRoleName(), defaultRole.getRoleId());
             }
         } catch (Exception e) {
             log.error("Error assigning default role to user with ID: {}", userId, e);
-            // Don't throw exception - user creation should succeed even if role assignment fails
-            // Role can be assigned later manually
         }
     }
 
@@ -147,7 +166,6 @@ public class UserService
             throw new RuntimeException("User not found");
         }
         
-        // Validate password
         if (!passwordEncoder.matches(loginRequest.getPassword(), users.getPassword())) {
             log.error("Invalid password for user: {}", loginRequest.getUserName());
             throw new RuntimeException("Invalid credentials");
