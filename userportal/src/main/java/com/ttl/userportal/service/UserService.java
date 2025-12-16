@@ -20,9 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -233,18 +231,17 @@ public class UserService
         log.info("Removed role ID {} from user ID {}", roleId, userId);
     }
 
-    public EmployeeDTO userDetails(UserDetails userDetails)
-    {
-        String userName=userDetails.getEmail();
+    public EmployeeDTO userDetails(UserDetails userDetails) {
+        String userName = userDetails.getEmail();
         log.info("User Details method for user: {}", userName);
-        Users users=userRepository.findByEmail(userName);
+        Users users = userRepository.findByEmail(userName);
 
         if (users == null) {
             log.error("User not found with email: {}", userName);
             throw new RuntimeException("User not found with email: " + userName);
         }
-        
-        EmployeeDTO employeeDetails=new EmployeeDTO();
+
+        EmployeeDTO employeeDetails = new EmployeeDTO();
 
         // Personal Info mapping
         PersonalInfo personalInfo = new PersonalInfo();
@@ -274,7 +271,7 @@ public class UserService
         } catch (Exception e) {
             // If there's any error, fallback to old field
             profileImageUrl = users.getProfileImage();
-            log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}", 
+            log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}",
                     users.getEmail(), e.getMessage());
         }
         personalInfo.setProfileImage(profileImageUrl);
@@ -289,41 +286,46 @@ public class UserService
         professionalInfo.setJoinDate(users.getJoinDate() != null ? users.getJoinDate().toString() : null);
         professionalInfo.setExperience(users.getExperience());
         professionalInfo.setTeam(users.getTeam());
-        professionalInfo.setSkills(List.of(users.getSkills().split(",")));
+        professionalInfo.setSkills(splitCsvToList(users.getSkills()));
         professionalInfo.setEducation(users.getEducation());
-        professionalInfo.setLanguages(List.of(users.getLanguages().split(",")));
-        professionalInfo.setAchievements(List.of(users.getAchievement().split(",")));
+        professionalInfo.setLanguages(splitCsvToList(users.getLanguages()));
+        professionalInfo.setAchievements(splitCsvToList(users.getAchievement()));
 
         if (users.getManager() != null) {
-            ManagerDTO manager = new ManagerDTO();
-            Users managerData=userRepository.findByIdAndStatus(users.getManager(), Users.Status.Active);
-            manager.setName(managerData.getName());
-            manager.setPosition(managerData.getPosition());
-            manager.setEmail(managerData.getEmail());
-            manager.setPhone(managerData.getPhone());
-            manager.setId(manager.getId());
-            String managerImg=null;
+            Users managerData = userRepository.findByIdAndStatus(users.getManager(), Users.Status.Active);
+            if (managerData != null) {
+                ManagerDTO manager = new ManagerDTO();
+                manager.setName(managerData.getName());
+                manager.setPosition(managerData.getPosition());
+                manager.setEmail(managerData.getEmail());
+                manager.setPhone(managerData.getPhone());
+                manager.setId(managerData.getId());
 
+            String managerImg = null;
             try {
                 // Try to get image from new employee_images table
                 Optional<EmployeeImageDTO> imageData = employeeImageService.getPrimaryImageByEmployeeId(managerData.getId().longValue());
                 if (imageData.isPresent()) {
                     managerImg = imageData.get().getImageUrl();
-                    log.info("Found image from employee_images table for user: {}", users.getEmail());
+                    log.info("Found image from employee_images table for manager: {}", managerData.getEmail());
                 } else {
-                    // Fallback to old profile_image field
-                    managerImg = users.getProfileImage();
-                    log.info("Using fallback profile_image field for user: {}", users.getEmail());
+                    // Fallback to manager's old profile_image field
+                    managerImg = managerData.getProfileImage();
+                    log.info("Using fallback profile_image field for manager: {}", managerData.getEmail());
                 }
             } catch (Exception e) {
-                // If there's any error, fallback to old field
-                managerImg = users.getProfileImage();
-                log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}",
-                        users.getEmail(), e.getMessage());
+                // If there's any error, fallback to manager's old field
+                managerImg = managerData.getProfileImage();
+                log.warn("Error fetching image from employee_images table for manager: {}, error: {}",
+                        managerData.getEmail(), e.getMessage());
             }
+
             manager.setProfileImage(managerImg);
             professionalInfo.setManager(manager);
+        } else {
+            log.warn("Manager with ID {} not found or not active for user {}", users.getManager(), users.getEmail());
         }
+    }
 
         // Projects mapping
 
@@ -414,6 +416,16 @@ public class UserService
         }
 
         return employeeDetailsList;
+    }
+
+    private List<String> splitCsvToList(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
     }
 
     /**
