@@ -67,8 +67,6 @@ public class LeaveController
         } catch (Exception e) {
             // Log the exception for debugging
             e.printStackTrace();
-
-            // Return a proper error response
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to fetch upcoming leaves");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);

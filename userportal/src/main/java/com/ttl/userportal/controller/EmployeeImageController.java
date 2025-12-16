@@ -44,10 +44,7 @@ public class EmployeeImageController {
 //                    .body("Error uploading file: " + e.getMessage());
 //        }
 //    }
-    
-    /**
-     * Get primary image for employee
-     */
+
     @GetMapping("/employee/{employeeId}")
     public ResponseEntity<?> getEmployeePrimaryImage(@PathVariable Long employeeId) {
         Optional<EmployeeImageDTO> imageDTO = employeeImageService.getPrimaryImageByEmployeeId(employeeId);
@@ -57,29 +54,20 @@ public class EmployeeImageController {
             return ResponseEntity.notFound().build();
         }
     }
-    
-    /**
-     * Get all images for employee
-     */
+
     @GetMapping("/employee/{employeeId}/all")
     public ResponseEntity<List<EmployeeImageDTO>> getAllEmployeeImages(@PathVariable Long employeeId) {
         List<EmployeeImageDTO> images = employeeImageService.getAllImagesByEmployeeId(employeeId);
         return ResponseEntity.ok(images);
     }
-    
-    /**
-     * Get primary images for multiple employees
-     */
+
     @PostMapping("/employees/primary")
     public ResponseEntity<List<EmployeeImageDTO>> getPrimaryImagesForEmployees(
             @RequestBody List<Long> employeeIds) {
         List<EmployeeImageDTO> images = employeeImageService.getPrimaryImagesByEmployeeIds(employeeIds);
         return ResponseEntity.ok(images);
     }
-    
-    /**
-     * Serve image file
-     */
+
     @GetMapping("/employee/{employeeId}/{filename}")
     public ResponseEntity<Resource> serveImage(
             @PathVariable Long employeeId,
@@ -113,10 +101,6 @@ public class EmployeeImageController {
             return ResponseEntity.badRequest().build();
         }
     }
-    
-    /**
-     * Delete employee image
-     */
     @DeleteMapping("/employee/{imageId}")
     public ResponseEntity<?> deleteEmployeeImage(@PathVariable Long imageId) {
         try {
@@ -127,10 +111,7 @@ public class EmployeeImageController {
                     .body("Error deleting image: " + e.getMessage());
         }
     }
-    
-    /**
-     * Delete all images for employee
-     */
+
     @DeleteMapping("/employee/{employeeId}/all")
     public ResponseEntity<?> deleteAllEmployeeImages(@PathVariable Long employeeId) {
         try {

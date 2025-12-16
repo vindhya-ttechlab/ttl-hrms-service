@@ -2,11 +2,9 @@ package com.ttl.userportal.service;
 
 import com.ttl.userportal.dto.EmailDetailsDTO;
 import com.ttl.userportal.dto.LeaveRequestDTO;
-import com.ttl.userportal.dto.UserDetailsDTO;
-import com.ttl.userportal.entity.LeaveEntity;
-import com.ttl.userportal.entity.Users;
-import com.ttl.userportal.repository.LeaveRepository;
-import com.ttl.userportal.repository.UserRepository;
+import com.ttl.userportal.entity.*;
+import com.ttl.userportal.mapper.LeaveMapper;
+import com.ttl.userportal.repository.*;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,7 +25,22 @@ public class LeaveService
     UserRepository userRepository;
 
     @Autowired
+    EmployeeRepository employeeRepository;
+
+    @Autowired
     EmailNotificationService emailNotificationService;
+
+    @Autowired
+    LeaveMapper leaveMapper;
+    
+    @Autowired
+    LeaveTypeService leaveTypeService;
+
+    @Autowired
+    LeaveTypeRepository leaveTypeRepos;
+
+    @Autowired
+    EmployeeLeaveBalanceRepository employeeLeaveBalanceRepository;
     //save LeaveRequest
     public void saveOrUpdateLeaveRequest(LeaveRequestDTO leaveRequest, UserDetails userDetails)
     {
@@ -37,99 +50,82 @@ public class LeaveService
         {
             throw new IllegalArgumentException("Leave request cannot be null");
         }
-        String userName = userDetails.getUser_name();
         Integer userId = Math.toIntExact(userDetails.getUser_id());
+        Users users = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User Not found"));
+        Employee employee = employeeRepository.findByEmail(users.getEmail())
+                .orElseThrow(() -> new RuntimeException("Employee not found for user email: " + users.getEmail()));
 
-        LeaveEntity leaveEntity = new LeaveEntity();
-        LocalDate fromDate= LocalDate.parse(leaveRequest.getFromDate());
-        LocalDate endDate= LocalDate.parse(leaveRequest.getToDate());
-
-        EmailDetailsDTO emailDetailsDTO=new EmailDetailsDTO();
-
-            Users users=userRepository.findById(userId).orElseThrow(()->new RuntimeException("User Not found"));
-            Integer managerId=users.getManager();
-            Users manager = userRepository.findById(managerId)
-                    .orElseThrow(() -> new RuntimeException("Manager not found"));
-            emailDetailsDTO.setReceiverEmail(manager.getEmail());
-            emailDetailsDTO.setSenderEmail(users.getEmail());
+        Integer managerEmployeeId = employee.getManagerId();
+        Employee managerEmployee = null;
+        if (managerEmployeeId != null) {
+            managerEmployee = employeeRepository.findById(managerEmployeeId)
+                    .orElseThrow(() -> new RuntimeException("Manager employee not found"));
+        }
+        if (managerEmployee != null) {
+            EmailDetailsDTO emailDetailsDTO = new EmailDetailsDTO();
+            emailDetailsDTO.setReceiverEmail(managerEmployee.getEmail());
+            emailDetailsDTO.setSenderEmail(employee.getEmail());
             emailDetailsDTO.setMessage(leaveRequest.getReason());
-            emailDetailsDTO.setSubject(leaveRequest.getType()+"  Request"+" from "+fromDate+" to "+endDate);
+            LocalDate fromDate = LocalDate.parse(leaveRequest.getFromDate());
+            LocalDate endDate = LocalDate.parse(leaveRequest.getToDate());
+            emailDetailsDTO.setSubject(leaveRequest.getType() + " Request from " + fromDate + " to " + endDate);
             emailDetailsDTO.setSentDateTime(now);
             emailNotificationService.sendEmail(emailDetailsDTO);
+        }
         
-        if(leaveRequest.getId()==null)
-        {
-            leaveEntity.setFromDate(fromDate);
-            leaveEntity.setToDate(endDate);
-            leaveEntity.setReason(leaveRequest.getReason());
-            leaveEntity.setType(leaveRequest.getType());
-            leaveEntity.setUserId(userId);
-            leaveEntity.setApprover(manager.getId());
-            leaveEntity.setAppliedDate(now);
-            leaveEntity.setApprovedDate(leaveRequest.getApprovedDate());
-            leaveEntity.setIsActive(true);
-            // Set default status for new leave requests
-            leaveEntity.setLeaveStatus(leaveRequest.getLeaveStatus() != null ? leaveRequest.getLeaveStatus() : "Pending");
-            // Calculate and set number of days
-            leaveEntity.setNumberOfDays(leaveRequest.getNumberOfDays());
-
+        if(leaveRequest.getId() == null) {
+            // Create new leave using mapper
+            LeaveEntity leaveEntity = leaveMapper.mapToLeaveEntity(
+                leaveRequest, 
+                employee.getEmployeeId(), 
+                managerEmployeeId, 
+                now
+            );
             leaveRepository.save(leaveEntity);
-
-
-        }else
-        {
-            leaveEntity=leaveRepository.findByIdAndIsActive(leaveRequest.getId(),true);
+            
+            // Update leave balance - new leave with Pending status
+            if (leaveEntity.getLeaveStatus() != null && "Pending".equalsIgnoreCase(leaveEntity.getLeaveStatus())) {
+                leaveTypeService.updateEmployeeLeaveBalance(
+                    leaveRequest,userDetails
+                );
+            }
+        } else {
+            // Update existing leave using mapper
+            LeaveEntity leaveEntity = leaveRepository.findByIdAndIsActive(leaveRequest.getId(), true);
             if (leaveEntity == null) {
                 throw new IllegalArgumentException("Leave request with ID " + leaveRequest.getId() + " not found or inactive");
             }
             
-            leaveEntity.setFromDate(fromDate);
-            leaveEntity.setToDate(endDate);
-            leaveEntity.setReason(leaveRequest.getReason());
-            leaveEntity.setType(leaveRequest.getType());
-            leaveEntity.setUserId(userId);
-            leaveEntity.setApprover(manager.getId());
-            leaveEntity.setAppliedDate(leaveRequest.getAppliedDate());
-            leaveEntity.setApprovedDate(leaveRequest.getApprovedDate());
-            leaveEntity.setIsActive(true);
-            // Update leave status if provided
-            if(leaveRequest.getLeaveStatus() != null) {
-                leaveEntity.setLeaveStatus(leaveRequest.getLeaveStatus());
-            }
-            leaveEntity.setNumberOfDays(leaveRequest.getNumberOfDays());
-
+            String oldStatus = leaveEntity.getLeaveStatus();
+            leaveMapper.updateLeaveEntity(leaveEntity, leaveRequest, employee.getEmployeeId(), managerEmployeeId);
             leaveRepository.save(leaveEntity);
+            
+            // Update leave balance if status changed
+            String newStatus = leaveEntity.getLeaveStatus();
+            if (oldStatus != null && newStatus != null && !oldStatus.equalsIgnoreCase(newStatus)) {
+                leaveTypeService.updateEmployeeLeaveBalance(
+                        leaveRequest,userDetails
+                );
+            }
         }
     }
 
     //getUpcomingLeaveData
-    public List<LeaveRequestDTO> upcomingLeaves(String userName,UserDetails userDetails)
+    public List<LeaveRequestDTO> upcomingLeaves(String userName, UserDetails userDetails)
     {
-
         LocalDate today = LocalDate.now();
-//        Users users=userRepository.findByEmail(userName);
         Integer userId= Math.toIntExact(userDetails.getUser_id());
+        
+        // Get Employee by email
+        Users users = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User Not found"));
+        Employee employee = employeeRepository.findByEmail(users.getEmail())
+                .orElseThrow(() -> new RuntimeException("Employee not found for user email: " + users.getEmail()));
 
-        List<LeaveEntity> upcomingLeaves = leaveRepository.listOfUpcomingLeaves(today,userId);
+        List<LeaveEntity> upcomingLeaves = leaveRepository.listOfUpcomingLeaves(today, employee.getEmployeeId());
 
-        // Map entities to DTOs manually
+        // Map entities to DTOs using mapper
         return upcomingLeaves.stream()
-                .map(leaveEntity -> {
-                    LeaveRequestDTO dto = new LeaveRequestDTO();
-                    dto.setId(leaveEntity.getId());
-                    dto.setFromDate(String.valueOf(leaveEntity.getFromDate()));
-                    dto.setToDate(String.valueOf(leaveEntity.getToDate()));
-                    dto.setReason(leaveEntity.getReason());
-                    dto.setType(leaveEntity.getType());
-                    dto.setUserId(Math.toIntExact(userDetails.getUser_id())); // Set actual Integer userId
-                    dto.setApprover(leaveEntity.getApprover());
-                    dto.setAppliedDate(leaveEntity.getAppliedDate());
-                    dto.setApprovedDate(leaveEntity.getApprovedDate());
-                    dto.setIsActive(leaveEntity.getIsActive());
-                    dto.setLeaveStatus(leaveEntity.getLeaveStatus());
-                    dto.setNumberOfDays(leaveEntity.getNumberOfDays());
-                    return dto;
-                })
+                .map(leaveMapper::mapToLeaveRequestDTO)
                 .collect(Collectors.toList());
     }
 
@@ -138,62 +134,40 @@ public class LeaveService
     {
 
         LocalDate today = LocalDate.now();
-//        Users users=userRepository.findByEmail(userName);
         Integer userId= Math.toIntExact(userDetails.getUser_id());
+        
+        // Get Employee by email
+        Users users = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User Not found"));
+        Employee employee = employeeRepository.findByEmail(users.getEmail())
+                .orElseThrow(() -> new RuntimeException("Employee not found for user email: " + users.getEmail()));
 
-        List<LeaveEntity> upcomingLeaves = leaveRepository.listOfPastLeaves(today,userId);
+        List<LeaveEntity> pastLeaves = leaveRepository.listOfPastLeaves(today, employee.getEmployeeId());
 
-        // Map entities to DTOs manually
-        return upcomingLeaves.stream()
-                .map(leaveEntity -> {
-                    LeaveRequestDTO dto = new LeaveRequestDTO();
-                    dto.setId(leaveEntity.getId());
-                    dto.setFromDate(String.valueOf(leaveEntity.getFromDate()));
-                    dto.setToDate(String.valueOf(leaveEntity.getToDate()));
-                    dto.setReason(leaveEntity.getReason());
-                    dto.setType(leaveEntity.getType());
-                    dto.setUserId(userId); // Set actual Integer userId
-                    dto.setApprover(leaveEntity.getApprover());
-                    dto.setAppliedDate(leaveEntity.getAppliedDate());
-                    dto.setApprovedDate(leaveEntity.getApprovedDate());
-                    dto.setIsActive(leaveEntity.getIsActive());
-                    dto.setLeaveStatus(leaveEntity.getLeaveStatus());
-                    dto.setNumberOfDays(leaveEntity.getNumberOfDays());
-                    return dto;
-                })
+        // Map entities to DTOs using mapper
+        return pastLeaves.stream()
+                .map(leaveMapper::mapToLeaveRequestDTO)
                 .collect(Collectors.toList());
     }
 
 
     public List<LeaveRequestDTO> getLeaves(UserDetails userDetails)
     {
-
-        LocalDate today = LocalDate.now();
         int currentYear = LocalDate.now().getYear();
         Integer userId= Math.toIntExact(userDetails.getUser_id());
+        
+        // Get Employee by email to get managerId
+        Users users = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User Not found"));
+        Employee employee = employeeRepository.findByEmail(users.getEmail())
+                .orElseThrow(() -> new RuntimeException("Employee not found for user email: " + users.getEmail()));
 
-        List<LeaveEntity> leaves = leaveRepository.findByApprover(currentYear,userId);
+        List<LeaveEntity> leaves = leaveRepository.findByApprover(currentYear, employee.getEmployeeId());
 
-        // Map entities to DTOs manually
+        // Map entities to DTOs using mapper
         return leaves.stream()
                 .map(leaveEntity -> {
-                    Users users=userRepository.findById(leaveEntity.getUserId()).orElseThrow(()->new RuntimeException("User Not found"));
-                    LeaveRequestDTO dto = new LeaveRequestDTO();
-                    dto.setId(leaveEntity.getId());
-                    dto.setFromDate(String.valueOf(leaveEntity.getFromDate()));
-                    dto.setToDate(String.valueOf(leaveEntity.getToDate()));
-                    dto.setReason(leaveEntity.getReason());
-                    dto.setType(leaveEntity.getType());
-                    dto.setUserId(users.getId()); // Set actual Integer userId
-                    dto.setApprover(leaveEntity.getApprover());
-                    dto.setAppliedDate(leaveEntity.getAppliedDate());
-                    dto.setApprovedDate(leaveEntity.getApprovedDate());
-                    dto.setIsActive(leaveEntity.getIsActive());
-                    dto.setLeaveStatus(leaveEntity.getLeaveStatus());
-                    dto.setNumberOfDays(leaveEntity.getNumberOfDays());
-                    dto.setUserName(users.getName());
-
-                    return dto;
+                    Employee leaveEmployee = employeeRepository.findById(leaveEntity.getEmployeeId())
+                            .orElseThrow(() -> new RuntimeException("Employee Not found for leave"));
+                    return leaveMapper.mapToLeaveRequestDTO(leaveEntity, leaveEmployee);
                 })
                 .collect(Collectors.toList());
     }
@@ -204,25 +178,32 @@ public class LeaveService
         LocalDateTime now=LocalDateTime.now();
         if(leaveRequestDTO.getId()!=null)
         {
-            LeaveEntity leaveEntity=leaveRepository.findById(leaveRequestDTO.getId()).orElseThrow(()-> new RuntimeException("Leave Request is Empty"));
-            leaveEntity.setLeaveStatus("Approved");
-            leaveEntity.setApprovedDate(now);
-            leaveEntity.setManagerComment(leaveRequestDTO.getComment());
+            LeaveEntity leaveEntity=leaveRepository.findById(leaveRequestDTO.getId())
+                    .orElseThrow(()-> new RuntimeException("Leave Request is Empty"));
+            String oldStatus = leaveEntity.getLeaveStatus();
+            leaveMapper.updateLeaveStatus(leaveEntity, "Approved", now, leaveRequestDTO.getComment());
             leaveRepository.save(leaveEntity);
-
-
-            EmailDetailsDTO emailDetailsDTO=new EmailDetailsDTO();
-
-            Users users=userRepository.findById(userDetails.getUser_id());
-            Integer managerId=leaveEntity.getApprover();
-            Users manager = userRepository.findById(managerId)
-                    .orElseThrow(() -> new RuntimeException("Manager not found"));
-            emailDetailsDTO.setReceiverEmail(users.getEmail());
-            emailDetailsDTO.setSenderEmail(manager.getEmail());
-            emailDetailsDTO.setMessage(leaveRequestDTO.getComment());
-            emailDetailsDTO.setSubject("Approved "+leaveEntity.getType()+"  Request"+" from "+leaveEntity.getFromDate()+" to "+leaveEntity.getToDate());
-            emailDetailsDTO.setSentDateTime(now);
-            emailNotificationService.sendEmail(emailDetailsDTO);
+            leaveTypeService.updateEmployeeLeaveBalance(
+                    leaveRequestDTO,userDetails
+            );
+            Employee employee = employeeRepository.findById(leaveEntity.getEmployeeId())
+                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+            
+            Employee managerEmployee = null;
+            if (leaveEntity.getApprover() != null) {
+                managerEmployee = employeeRepository.findById(leaveEntity.getApprover())
+                        .orElseThrow(() -> new RuntimeException("Manager employee not found"));
+            }
+            
+            if (managerEmployee != null) {
+                EmailDetailsDTO emailDetailsDTO = new EmailDetailsDTO();
+                emailDetailsDTO.setReceiverEmail(employee.getEmail());
+                emailDetailsDTO.setSenderEmail(managerEmployee.getEmail());
+                emailDetailsDTO.setMessage(leaveRequestDTO.getComment());
+                emailDetailsDTO.setSubject("Approved "+leaveEntity.getType()+" Request from "+leaveEntity.getFromDate()+" to "+leaveEntity.getToDate());
+                emailDetailsDTO.setSentDateTime(now);
+                emailNotificationService.sendEmail(emailDetailsDTO);
+            }
         }
     }
 
@@ -231,25 +212,30 @@ public class LeaveService
         LocalDateTime now=LocalDateTime.now();
         if(leaveRequestDTO.getId()!=null)
         {
-            LeaveEntity leaveEntity=leaveRepository.findById(leaveRequestDTO.getId()).orElseThrow(()-> new RuntimeException("Leave Request is Empty"));
-            leaveEntity.setLeaveStatus("Rejected");
-            leaveEntity.setApprovedDate(now);
-            leaveEntity.setManagerComment(leaveRequestDTO.getComment());
+            LeaveEntity leaveEntity=leaveRepository.findById(leaveRequestDTO.getId())
+                    .orElseThrow(()-> new RuntimeException("Leave Request is Empty"));
+            String oldStatus = leaveEntity.getLeaveStatus();
+            leaveMapper.updateLeaveStatus(leaveEntity, "Rejected", now, leaveRequestDTO.getComment());
             leaveRepository.save(leaveEntity);
-
-
-            EmailDetailsDTO emailDetailsDTO=new EmailDetailsDTO();
-
-            Users users=userRepository.findById(userDetails.getUser_id());
-            Integer managerId=leaveEntity.getApprover();
-            Users manager = userRepository.findById(managerId)
-                    .orElseThrow(() -> new RuntimeException("Manager not found"));
-            emailDetailsDTO.setReceiverEmail(users.getEmail());
-            emailDetailsDTO.setSenderEmail(manager.getEmail());
-            emailDetailsDTO.setMessage(leaveRequestDTO.getComment());
-            emailDetailsDTO.setSubject("Rejected "+leaveEntity.getType()+"  Request"+" from "+leaveEntity.getFromDate()+" to "+leaveEntity.getToDate());
-            emailDetailsDTO.setSentDateTime(now);
-            emailNotificationService.sendEmail(emailDetailsDTO);
+            leaveTypeService.updateEmployeeLeaveBalance(leaveRequestDTO,userDetails);
+            Employee employee = employeeRepository.findById(leaveEntity.getEmployeeId())
+                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+            
+            Employee managerEmployee = null;
+            if (leaveEntity.getApprover() != null) {
+                managerEmployee = employeeRepository.findById(leaveEntity.getApprover())
+                        .orElseThrow(() -> new RuntimeException("Manager employee not found"));
+            }
+            
+            if (managerEmployee != null) {
+                EmailDetailsDTO emailDetailsDTO = new EmailDetailsDTO();
+                emailDetailsDTO.setReceiverEmail(employee.getEmail());
+                emailDetailsDTO.setSenderEmail(managerEmployee.getEmail());
+                emailDetailsDTO.setMessage(leaveRequestDTO.getComment());
+                emailDetailsDTO.setSubject("Rejected "+leaveEntity.getType()+" Request from "+leaveEntity.getFromDate()+" to "+leaveEntity.getToDate());
+                emailDetailsDTO.setSentDateTime(now);
+                emailNotificationService.sendEmail(emailDetailsDTO);
+            }
         }
     }
 }

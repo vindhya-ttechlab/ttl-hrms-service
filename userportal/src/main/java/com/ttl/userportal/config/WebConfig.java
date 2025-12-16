@@ -8,7 +8,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.util.List;
 
 /**
- * Web configuration to register custom argument resolvers
+ * Web configuration to register custom argument resolvers and interceptors
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {

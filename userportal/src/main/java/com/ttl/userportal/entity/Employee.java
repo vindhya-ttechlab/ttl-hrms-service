@@ -1,44 +1,47 @@
-
 package com.ttl.userportal.entity;
 
 import jakarta.persistence.*;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+/**
+ * Employee Entity
+ * Maps to the 'employees' table in the database
+ * Represents employee information separate from user authentication
+ */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
 @Entity
-@Table(name = "Users")
-public class Users {
+@Table(name = "employees")
+public class Employee {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
-    private Integer id;
+    @Column(name = "employee_id")
+    private Integer employeeId;
 
-    @Column(name = "emp_code", nullable = false, unique = true)
+    @Column(name = "emp_code", nullable = false, unique = true, length = 20)
     private String empCode;
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 150)
+    @Column(name = "email", nullable = false, unique = true, length = 150)
     private String email;
 
-    @Column(length = 20)
+    @Column(name = "phone", length = 20)
     private String phone;
 
-    @Column(length = 100)
+    @Column(name = "location", length = 100)
     private String location;
 
     @Column(name = "date_of_birth")
@@ -50,36 +53,39 @@ public class Users {
     @Column(name = "emergency_phone", length = 20)
     private String emergencyPhone;
 
-    @Column(length = 255)
+    @Column(name = "address", length = 255)
     private String address;
 
     @Column(name = "profile_image", length = 500)
     private String profileImage;
 
     @Enumerated(EnumType.STRING)
-    @Column(columnDefinition = "ENUM('Active','Inactive') DEFAULT 'Active'")
+    @Column(name = "status", columnDefinition = "ENUM('Active','Inactive') DEFAULT 'Active'")
     private Status status = Status.Active;
 
-    @Column(length = 100)
+    @Column(name = "position", length = 100)
     private String position;
 
-    @Column(length = 100)
+    @Column(name = "department", length = 100)
     private String department;
 
     @Column(name = "join_date")
     private LocalDate joinDate;
 
-    @Column(length = 50)
+    @Column(name = "experience", length = 50)
     private String experience;
 
-    @Column(length = 150)
+    @Column(name = "education", length = 150)
     private String education;
 
-    @Column(length = 100)
+    @Column(name = "team", length = 100)
     private String team;
 
     @Column(name = "manager_id")
-    private Integer manager;
+    private Integer managerId;
+
+    @Column(name = "user_id")
+    private Long userId;
 
     @Column(name = "created_at", updatable = false,
             columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -89,25 +95,15 @@ public class Users {
             columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
+    // Self-referencing relationship for manager
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id", insertable = false, updatable = false)
+    private Employee manager;
+
     // Enum for status
     public enum Status {
         Active,
         Inactive
     }
-
-    @Column(name="Password")
-    private String password;
-
-    @Column(name = "skills")
-    private String skills;
-
-    @Column(name = "languages")
-    private String languages;
-
-    @Column(name="achievement")
-    private String achievement;
-
-    @Column(name = "is_first_login", nullable = false)
-    private Boolean isFirstLogin = true; // Default to true for new users
-
 }
+

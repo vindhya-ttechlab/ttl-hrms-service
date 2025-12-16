@@ -14,4 +14,5 @@ public class LoginResponse
     private List<String> roles; // List of role names for the user
     private List<Integer> roleIds; // List of role IDs for the user
     private Integer primaryRoleId; // Primary role ID (first role, default: 1 for Employee)
+    private Boolean isFirstLogin; // Flag to indicate if user needs to change password
 }

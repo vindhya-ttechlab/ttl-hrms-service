@@ -1,10 +1,13 @@
 package com.ttl.userportal.controller;
 
+import com.ttl.userportal.config.CurrentUser;
 import com.ttl.userportal.dto.LeaveTypeDTO;
 import com.ttl.userportal.service.LeaveTypeService;
+import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -20,8 +23,10 @@ public class LeaveTypeController {
     private LeaveTypeService leaveTypeService;
     
     @GetMapping
+    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> getAllLeaveTypes(
-            @RequestParam(required = false) Boolean includeInactive) {
+            @RequestParam(required = false) Boolean includeInactive,
+            @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             List<LeaveTypeDTO> leaveTypes;
@@ -41,7 +46,10 @@ public class LeaveTypeController {
     }
     
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getLeaveTypeById(@PathVariable Integer id) {
+    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
+    public ResponseEntity<Map<String, Object>> getLeaveTypeById(
+            @PathVariable Integer id,
+            @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             LeaveTypeDTO leaveType = leaveTypeService.getLeaveTypeById(id);
@@ -56,7 +64,10 @@ public class LeaveTypeController {
     }
     
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createLeaveType(@RequestBody LeaveTypeDTO dto) {
+    @PreAuthorize("hasPermission('WRITE', 'LEAVE_TYPE')")
+    public ResponseEntity<Map<String, Object>> createLeaveType(
+            @RequestBody LeaveTypeDTO dto,
+            @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             LeaveTypeDTO created = leaveTypeService.createLeaveType(dto);
@@ -71,9 +82,11 @@ public class LeaveTypeController {
     }
     
     @PutMapping("/{id}")
+    @PreAuthorize("hasPermission('EDIT', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> updateLeaveType(
             @PathVariable Integer id, 
-            @RequestBody LeaveTypeDTO dto) {
+            @RequestBody LeaveTypeDTO dto,
+            @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             LeaveTypeDTO updated = leaveTypeService.updateLeaveType(id, dto);
@@ -88,10 +101,29 @@ public class LeaveTypeController {
     }
     
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteLeaveType(@PathVariable Integer id) {
+    @PreAuthorize("hasPermission('WRITE', 'LEAVE_TYPE')")
+    public ResponseEntity<Map<String, Object>> deleteLeaveType(
+            @PathVariable Integer id,
+            @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             leaveTypeService.deleteLeaveType(id);
+            response.put("message", "Leave type deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+            response.put("message", "Failed to delete leave type");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+
+    @GetMapping("/get-user-leave-details")
+    public ResponseEntity<Map<String,Object>>getLeaveDetailsForUser(@CurrentUser UserDetails userDetails )
+    {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            leaveTypeService.getLeaveBalanceDetailsForUser(userDetails);
             response.put("message", "Leave type deleted successfully");
             return ResponseEntity.ok(response);
         } catch (Exception e) {

@@ -29,6 +29,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain filterChain) throws ServletException, IOException {
         
+        // Skip JWT processing for public endpoints
+        String requestPath = request.getRequestURI();
+        if (requestPath.contains("/login") || requestPath.contains("/create-user")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        
         final String authorizationHeader = request.getHeader("Authorization");
         
         String username = null;

@@ -2,12 +2,15 @@ package com.ttl.userportal.service;
 
 import com.ttl.userportal.dto.*;
 import com.ttl.userportal.entity.BankDetails;
+import com.ttl.userportal.entity.Employee;
 import com.ttl.userportal.entity.Projects;
 import com.ttl.userportal.entity.Users;
 import com.ttl.userportal.entity.UserRoleMap;
 import com.ttl.userportal.entity.Role;
+import com.ttl.userportal.mapper.UserMapper;
 import com.ttl.userportal.repository.BankDetailsRepository;
 import com.ttl.userportal.repository.DocumentRepository;
+import com.ttl.userportal.repository.EmployeeRepository;
 import com.ttl.userportal.repository.ProjectRepository;
 import com.ttl.userportal.repository.UserRepository;
 import com.ttl.userportal.repository.UserRoleMapRepository;
@@ -15,14 +18,14 @@ import com.ttl.userportal.repository.RoleRepository;
 import com.ttl.userportal.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -57,61 +60,76 @@ public class UserService
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Value("${app.user.default.role.id:1}")
+    private Integer defaultRoleId;
+
+    @Value("${app.user.default.role.name:Employee}")
+    private String defaultRoleName;
 
 
+    @Autowired
+    private LeaveTypeService leaveTypeService;
+
+
+
+    @Transactional
     public Users createUser(CreateUserRequest createUserRequest) {
         log.info("Creating user: {}", createUserRequest.getEmail());
         
-        // Check if user already exists
         Users existingUser = userRepository.findByEmail(createUserRequest.getEmail());
         if (existingUser != null) {
             throw new RuntimeException("User with email " + createUserRequest.getEmail() + " already exists");
         }
+        Employee existingEmployee = employeeRepository.findByEmail(createUserRequest.getEmail()).orElse(null);
+        if (existingEmployee != null) {
+            throw new RuntimeException("Employee with email " + createUserRequest.getEmail() + " already exists");
+        }
+        String encodedPassword = passwordEncoder.encode(createUserRequest.getPassword());
         
-        // Create new user
-        Users user = new Users();
-        user.setEmpCode(createUserRequest.getEmpCode());
-        user.setName(createUserRequest.getName());
-        user.setEmail(createUserRequest.getEmail());
-        user.setPassword(passwordEncoder.encode(createUserRequest.getPassword()));
-        user.setPhone(createUserRequest.getPhone());
-        user.setLocation(createUserRequest.getLocation());
-        user.setDateOfBirth(createUserRequest.getDateOfBirth());
-        user.setEmergencyContact(createUserRequest.getEmergencyContact());
-        user.setEmergencyPhone(createUserRequest.getEmergencyPhone());
-        user.setAddress(createUserRequest.getAddress());
-        user.setPosition(createUserRequest.getPosition());
-        user.setDepartment(createUserRequest.getDepartment());
-        user.setJoinDate(createUserRequest.getJoinDate());
-        user.setExperience(createUserRequest.getExperience());
-        user.setEducation(createUserRequest.getEducation());
-        user.setTeam(createUserRequest.getTeam());
-        user.setManager(createUserRequest.getManager());
-        user.setSkills(createUserRequest.getSkills());
-        user.setLanguages(createUserRequest.getLanguages());
-        user.setAchievement(createUserRequest.getAchievement());
-        user.setStatus(Users.Status.Active);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        Users user = userMapper.mapToUser(createUserRequest, encodedPassword);
         
-        // Save user first to get the generated ID
         Users savedUser = userRepository.save(user);
+        log.info("User saved with ID: {}", savedUser.getId());
         
-        // Assign default role (role_id = 1, which should be Employee)
-        assignDefaultRole(savedUser.getId());
+        Employee employee = userMapper.mapToEmployee(createUserRequest);
+        
+        Employee savedEmployee = employeeRepository.save(employee);
+        log.info("Employee saved with ID: {}", savedEmployee.getEmployeeId());
+        
+        List<Integer> existingRoleIds = userRoleMapRepository.findActiveRoleIdsByUserId(savedUser.getId());
+        
+        if (existingRoleIds.isEmpty()) {
+            assignDefaultRoleFromProperties(savedUser.getId());
+        } else {
+            log.info("User {} already has {} roles assigned, skipping default role assignment", 
+                    savedUser.getId(), existingRoleIds.size());
+        }
+
+        leaveTypeService.getOrCreateBalance(savedEmployee.getEmployeeId());
         
         return savedUser;
     }
 
-    /**
-     * Assign default role (Employee - role_id = 1) to a user
-     * @param userId The user ID
-     */
-    private void assignDefaultRole(Integer userId) {
+    private void assignDefaultRoleFromProperties(Integer userId) {
         try {
-            // Get default role (Employee with role_id = 1)
-            Role defaultRole = roleRepository.findById(1)
-                    .orElseThrow(() -> new RuntimeException("Default role (Employee) not found. Please ensure roles are initialized in the database."));
+            log.info("Assigning default role (ID: {}, Name: {}) to user ID: {}", defaultRoleId, defaultRoleName, userId);
+            
+            // Get default role from application properties
+            Role defaultRole = roleRepository.findById(defaultRoleId)
+                    .orElseThrow(() -> new RuntimeException(
+                        String.format("Default role with ID %d (%s) not found. Please ensure roles are initialized in the database.", 
+                                defaultRoleId, defaultRoleName)));
+            
+            if (!defaultRoleName.equals(defaultRole.getRoleName())) {
+                log.warn("Default role name mismatch: Expected '{}', but found '{}'. Using role ID {} anyway.", 
+                        defaultRoleName, defaultRole.getRoleName(), defaultRoleId);
+            }
             
             // Check if user already has this role
             if (!userRoleMapRepository.existsByUserIdAndRoleId(userId, defaultRole.getRoleId())) {
@@ -123,14 +141,14 @@ public class UserService
                 userRoleMap.setUpdatedAt(LocalDateTime.now());
                 
                 userRoleMapRepository.save(userRoleMap);
-                log.info("Assigned default role '{}' to user with ID: {}", defaultRole.getRoleName(), userId);
+                log.info("Assigned default role '{}' (ID: {}) to user with ID: {}", 
+                        defaultRole.getRoleName(), defaultRole.getRoleId(), userId);
             } else {
-                log.info("User with ID {} already has role '{}'", userId, defaultRole.getRoleName());
+                log.info("User with ID {} already has role '{}' (ID: {})", 
+                        userId, defaultRole.getRoleName(), defaultRole.getRoleId());
             }
         } catch (Exception e) {
             log.error("Error assigning default role to user with ID: {}", userId, e);
-            // Don't throw exception - user creation should succeed even if role assignment fails
-            // Role can be assigned later manually
         }
     }
 
@@ -146,7 +164,6 @@ public class UserService
             throw new RuntimeException("User not found");
         }
         
-        // Validate password
         if (!passwordEncoder.matches(loginRequest.getPassword(), users.getPassword())) {
             log.error("Invalid password for user: {}", loginRequest.getUserName());
             throw new RuntimeException("Invalid credentials");
@@ -172,6 +189,7 @@ public class UserService
         loginResponse.setRoles(userRoles);
         loginResponse.setRoleIds(userRoleIds);
         loginResponse.setPrimaryRoleId(primaryRoleId);
+        loginResponse.setIsFirstLogin(users.getIsFirstLogin() != null ? users.getIsFirstLogin() : true);
 
         return loginResponse;
     }
@@ -231,18 +249,17 @@ public class UserService
         log.info("Removed role ID {} from user ID {}", roleId, userId);
     }
 
-    public EmployeeDTO userDetails(UserDetails userDetails)
-    {
-        String userName=userDetails.getEmail();
+    public EmployeeDTO userDetails(UserDetails userDetails) {
+        String userName = userDetails.getEmail();
         log.info("User Details method for user: {}", userName);
-        Users users=userRepository.findByEmail(userName);
+        Users users = userRepository.findByEmail(userName);
 
         if (users == null) {
             log.error("User not found with email: {}", userName);
             throw new RuntimeException("User not found with email: " + userName);
         }
-        
-        EmployeeDTO employeeDetails=new EmployeeDTO();
+
+        EmployeeDTO employeeDetails = new EmployeeDTO();
 
         // Personal Info mapping
         PersonalInfo personalInfo = new PersonalInfo();
@@ -272,7 +289,7 @@ public class UserService
         } catch (Exception e) {
             // If there's any error, fallback to old field
             profileImageUrl = users.getProfileImage();
-            log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}", 
+            log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}",
                     users.getEmail(), e.getMessage());
         }
         personalInfo.setProfileImage(profileImageUrl);
@@ -287,41 +304,46 @@ public class UserService
         professionalInfo.setJoinDate(users.getJoinDate() != null ? users.getJoinDate().toString() : null);
         professionalInfo.setExperience(users.getExperience());
         professionalInfo.setTeam(users.getTeam());
-        professionalInfo.setSkills(List.of(users.getSkills().split(",")));
+        professionalInfo.setSkills(splitCsvToList(users.getSkills()));
         professionalInfo.setEducation(users.getEducation());
-        professionalInfo.setLanguages(List.of(users.getLanguages().split(",")));
-        professionalInfo.setAchievements(List.of(users.getAchievement().split(",")));
+        professionalInfo.setLanguages(splitCsvToList(users.getLanguages()));
+        professionalInfo.setAchievements(splitCsvToList(users.getAchievement()));
 
         if (users.getManager() != null) {
-            ManagerDTO manager = new ManagerDTO();
-            Users managerData=userRepository.findByIdAndStatus(users.getManager(), Users.Status.Active);
-            manager.setName(managerData.getName());
-            manager.setPosition(managerData.getPosition());
-            manager.setEmail(managerData.getEmail());
-            manager.setPhone(managerData.getPhone());
-            manager.setId(manager.getId());
-            String managerImg=null;
+            Users managerData = userRepository.findByIdAndStatus(users.getManager(), Users.Status.Active);
+            if (managerData != null) {
+                ManagerDTO manager = new ManagerDTO();
+                manager.setName(managerData.getName());
+                manager.setPosition(managerData.getPosition());
+                manager.setEmail(managerData.getEmail());
+                manager.setPhone(managerData.getPhone());
+                manager.setId(managerData.getId());
 
+            String managerImg = null;
             try {
                 // Try to get image from new employee_images table
                 Optional<EmployeeImageDTO> imageData = employeeImageService.getPrimaryImageByEmployeeId(managerData.getId().longValue());
                 if (imageData.isPresent()) {
                     managerImg = imageData.get().getImageUrl();
-                    log.info("Found image from employee_images table for user: {}", users.getEmail());
+                    log.info("Found image from employee_images table for manager: {}", managerData.getEmail());
                 } else {
-                    // Fallback to old profile_image field
-                    managerImg = users.getProfileImage();
-                    log.info("Using fallback profile_image field for user: {}", users.getEmail());
+                    // Fallback to manager's old profile_image field
+                    managerImg = managerData.getProfileImage();
+                    log.info("Using fallback profile_image field for manager: {}", managerData.getEmail());
                 }
             } catch (Exception e) {
-                // If there's any error, fallback to old field
-                managerImg = users.getProfileImage();
-                log.warn("Error fetching image from employee_images table, using fallback for user: {}, error: {}",
-                        users.getEmail(), e.getMessage());
+                // If there's any error, fallback to manager's old field
+                managerImg = managerData.getProfileImage();
+                log.warn("Error fetching image from employee_images table for manager: {}, error: {}",
+                        managerData.getEmail(), e.getMessage());
             }
+
             manager.setProfileImage(managerImg);
             professionalInfo.setManager(manager);
+        } else {
+            log.warn("Manager with ID {} not found or not active for user {}", users.getManager(), users.getEmail());
         }
+    }
 
         // Projects mapping
 
@@ -412,5 +434,56 @@ public class UserService
         }
 
         return employeeDetailsList;
+    }
+
+    private List<String> splitCsvToList(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Change user password (for first-time login or regular password change)
+     * @param userId The user ID
+     * @param changePasswordRequest The change password request
+     * @return true if password changed successfully
+     */
+    public boolean changePassword(Integer userId, ChangePasswordRequest changePasswordRequest) {
+        log.info("Changing password for user ID: {}", userId);
+        
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // Validate current password if it's not first login
+        if (user.getIsFirstLogin() == null || !user.getIsFirstLogin()) {
+            if (changePasswordRequest.getCurrentPassword() == null || 
+                !passwordEncoder.matches(changePasswordRequest.getCurrentPassword(), user.getPassword())) {
+                throw new RuntimeException("Current password is incorrect");
+            }
+        }
+        
+        // Validate new password and confirm password match
+        if (!changePasswordRequest.getNewPassword().equals(changePasswordRequest.getConfirmPassword())) {
+            throw new RuntimeException("New password and confirm password do not match");
+        }
+        
+        // Validate password strength (minimum 8 characters)
+        if (changePasswordRequest.getNewPassword().length() < 8) {
+            throw new RuntimeException("Password must be at least 8 characters long");
+        }
+        
+        // Update password
+        user.setPassword(passwordEncoder.encode(changePasswordRequest.getNewPassword()));
+        user.setIsFirstLogin(false); // Mark that user has changed password
+        user.setUpdatedAt(LocalDateTime.now());
+        
+        userRepository.save(user);
+        log.info("Password changed successfully for user ID: {}", userId);
+        
+        return true;
     }
 }
