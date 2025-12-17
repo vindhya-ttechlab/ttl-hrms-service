@@ -1,7 +1,6 @@
 package com.ttl.userportal.controller;
 
 import com.ttl.userportal.config.CurrentUser;
-import com.ttl.userportal.config.RequiresPermission;
 import com.ttl.userportal.dto.*;
 import com.ttl.userportal.service.ReimbursementService;
 import com.ttl.userportal.util.model.UserDetails;
@@ -12,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -52,8 +52,8 @@ public class ReimbursementController {
     /**
      * Create a new category (Admin only)
      */
+    @PreAuthorize("hasAuthority('REIMBURSEMENT_CATEGORY_WRITE')")
     @PostMapping("/categories")
-    @RequiresPermission(permission = "WRITE", resource = "REIMBURSEMENT_CATEGORY")
     public ResponseEntity<Map<String, Object>> createCategory(
             @RequestBody ReimbursementCategoryDTO dto,
             @CurrentUser UserDetails userDetails) {
@@ -243,8 +243,8 @@ public class ReimbursementController {
         );
     }
 
+    @PreAuthorize("hasAuthority('REIMBURSEMENT_HR_APPROVE')")
     @GetMapping("/approvals/hr/pending")
-    @RequiresPermission(permission = "APPROVE", resource = "REIMBURSEMENT_HR")
     public ResponseEntity<?> getHrPending(@CurrentUser UserDetails user) {
         return ResponseEntity.ok(
                 reimbursementService.getPendingHrApprovals()
@@ -379,8 +379,8 @@ public class ReimbursementController {
         return "application/octet-stream";
     }
 
+    @PreAuthorize("hasAuthority('REIMBURSEMENT_HR_APPROVE')")
     @PostMapping("/approvals/hr")
-    @RequiresPermission(permission = "APPROVE", resource = "REIMBURSEMENT_HR")
     public ResponseEntity<?> hrApproveOrReject(
             @RequestBody ReimbursementApprovalDTO approval,
             @CurrentUser UserDetails userDetails) {
