@@ -2,6 +2,7 @@ package com.ttl.userportal.controller;
 
 import com.ttl.userportal.config.CurrentUser;
 import com.ttl.userportal.dto.*;
+import com.ttl.userportal.entity.Role;
 import com.ttl.userportal.entity.Users;
 import com.ttl.userportal.service.PrivilegeService;
 import com.ttl.userportal.service.UserService;
@@ -39,9 +40,10 @@ public class UserController
             }
             
             Users createdUser = userService.createUser(createUserRequest);
-            response.put("message", "User created successfully");
+            response.put("message", "User created successfully. Password has been auto-generated and sent to the user's email.");
             response.put("userId", createdUser.getId());
             response.put("email", createdUser.getEmail());
+            response.put("passwordSentViaEmail", true);
             return new ResponseEntity<>(response, HttpStatus.CREATED);
         } catch (Exception e) {
             response.put("error", e.getMessage());
@@ -186,4 +188,28 @@ public class UserController
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
+
+    @GetMapping("/get-roles")
+    public ResponseEntity<Map<String, Object>> getAllRoles() {
+
+        Map<String, Object> response = new HashMap<>();
+
+        try {
+            List<Role> roles = userService.getAllRoles();
+
+            response.put("status", "SUCCESS");
+            response.put("message", "Roles fetched successfully");
+            response.put("data", roles);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            response.put("status", "ERROR");
+            response.put("message", "Failed to fetch roles");
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(response);
+        }
+    }
+
 }

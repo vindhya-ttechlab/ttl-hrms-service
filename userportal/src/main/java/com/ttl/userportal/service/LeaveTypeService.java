@@ -11,7 +11,6 @@ import com.ttl.userportal.repository.LeaveTypeRepository;
 import com.ttl.userportal.util.model.UserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -56,13 +55,8 @@ public class LeaveTypeService {
         }
         
         LeaveType leaveType = new LeaveType();
-        leaveType.setTypeName(dto.getTypeName());
-        leaveType.setDescription(dto.getDescription());
-        leaveType.setNumberOfDays(dto.getNumberOfDays());
+        mapDtoToEntity(dto, leaveType);
         leaveType.setIsActive(dto.getIsActive() != null ? dto.getIsActive() : true);
-        leaveType.setIsCarryForwardAllowed(dto.getIsCarryForwardAllowed() != null ? dto.getIsCarryForwardAllowed() : false);
-        leaveType.setMaxCarryForwardDays(dto.getMaxCarryForwardDays());
-        leaveType.setRequiresApproval(dto.getRequiresApproval() != null ? dto.getRequiresApproval() : true);
         leaveType.setCreatedAt(LocalDateTime.now());
         leaveType.setUpdatedAt(LocalDateTime.now());
         
@@ -80,17 +74,32 @@ public class LeaveTypeService {
             throw new RuntimeException("Leave type with name '" + dto.getTypeName() + "' already exists");
         }
         
-        leaveType.setTypeName(dto.getTypeName());
-        leaveType.setDescription(dto.getDescription());
-        leaveType.setNumberOfDays(dto.getNumberOfDays());
-        leaveType.setIsActive(dto.getIsActive());
-        leaveType.setIsCarryForwardAllowed(dto.getIsCarryForwardAllowed());
-        leaveType.setMaxCarryForwardDays(dto.getMaxCarryForwardDays());
-        leaveType.setRequiresApproval(dto.getRequiresApproval());
+        mapDtoToEntity(dto, leaveType);
         leaveType.setUpdatedAt(LocalDateTime.now());
         
         LeaveType updated = leaveTypeRepository.save(leaveType);
         return convertToDTO(updated);
+    }
+    
+    private void mapDtoToEntity(LeaveTypeDTO dto, LeaveType entity) {
+        entity.setTypeCode(dto.getTypeCode());
+        entity.setTypeName(dto.getTypeName());
+        entity.setDescription(dto.getDescription());
+        entity.setNumberOfDays(dto.getNumberOfDays());
+        entity.setIsActive(dto.getIsActive());
+        entity.setIsCarryForwardAllowed(dto.getIsCarryForwardAllowed() != null ? dto.getIsCarryForwardAllowed() : false);
+        entity.setMaxCarryForwardDays(dto.getMaxCarryForwardDays());
+        entity.setRequiresApproval(dto.getRequiresApproval() != null ? dto.getRequiresApproval() : true);
+        entity.setAdvanceNoticeDays(dto.getAdvanceNoticeDays());
+        entity.setMedicalCertRequiredAfterDays(dto.getMedicalCertRequiredAfterDays());
+        entity.setApplicableGender(dto.getApplicableGender() != null ? dto.getApplicableGender() : "ALL");
+        entity.setMinAge(dto.getMinAge());
+        entity.setMaxAge(dto.getMaxAge());
+        entity.setExpiryDays(dto.getExpiryDays());
+        entity.setIsPaid(dto.getIsPaid() != null ? dto.getIsPaid() : true);
+        entity.setAllowHalfDay(dto.getAllowHalfDay() != null ? dto.getAllowHalfDay() : true);
+        entity.setMaxPerMonth(dto.getMaxPerMonth());
+        entity.setMinHoursForComp(dto.getMinHoursForComp());
     }
     
     public void deleteLeaveType(Integer id) {
@@ -102,16 +111,27 @@ public class LeaveTypeService {
     }
     
     private LeaveTypeDTO convertToDTO(LeaveType leaveType) {
-        return new LeaveTypeDTO(
-                leaveType.getLeaveTypeId(),
-                leaveType.getTypeName(),
-                leaveType.getDescription(),
-                leaveType.getNumberOfDays(),
-                leaveType.getIsActive(),
-                leaveType.getIsCarryForwardAllowed(),
-                leaveType.getMaxCarryForwardDays(),
-                leaveType.getRequiresApproval()
-        );
+        LeaveTypeDTO dto = new LeaveTypeDTO();
+        dto.setLeaveTypeId(leaveType.getLeaveTypeId());
+        dto.setTypeCode(leaveType.getTypeCode());
+        dto.setTypeName(leaveType.getTypeName());
+        dto.setDescription(leaveType.getDescription());
+        dto.setNumberOfDays(leaveType.getNumberOfDays());
+        dto.setIsActive(leaveType.getIsActive());
+        dto.setIsCarryForwardAllowed(leaveType.getIsCarryForwardAllowed());
+        dto.setMaxCarryForwardDays(leaveType.getMaxCarryForwardDays());
+        dto.setRequiresApproval(leaveType.getRequiresApproval());
+        dto.setAdvanceNoticeDays(leaveType.getAdvanceNoticeDays());
+        dto.setMedicalCertRequiredAfterDays(leaveType.getMedicalCertRequiredAfterDays());
+        dto.setApplicableGender(leaveType.getApplicableGender());
+        dto.setMinAge(leaveType.getMinAge());
+        dto.setMaxAge(leaveType.getMaxAge());
+        dto.setExpiryDays(leaveType.getExpiryDays());
+        dto.setIsPaid(leaveType.getIsPaid());
+        dto.setAllowHalfDay(leaveType.getAllowHalfDay());
+        dto.setMaxPerMonth(leaveType.getMaxPerMonth());
+        dto.setMinHoursForComp(leaveType.getMinHoursForComp());
+        return dto;
     }
 
     public Map<String,Object>getLeaveBalanceDetailsForUser(UserDetails userDetails) {
@@ -138,27 +158,38 @@ public class LeaveTypeService {
     }
     public void updateEmployeeLeaveBalance(LeaveRequestDTO leaveRequestDTO, UserDetails userDetails)
     {
-        Integer leaveTypeId = leaveTypeRepository
-                .findByTypeName(leaveRequestDTO.getType())
-                .get()
-                .getLeaveTypeId();
+        Integer leaveTypeId;
+        
+        // Prefer leaveTypeId from DTO, fallback to lookup by type name
+        if (leaveRequestDTO.getLeaveTypeId() != null) {
+            leaveTypeId = leaveRequestDTO.getLeaveTypeId();
+        } else if (leaveRequestDTO.getType() != null) {
+            leaveTypeId = leaveTypeRepository
+                    .findByTypeName(leaveRequestDTO.getType())
+                    .orElseThrow(() -> new RuntimeException("Leave type not found: " + leaveRequestDTO.getType()))
+                    .getLeaveTypeId();
+        } else {
+            throw new IllegalArgumentException("Leave type ID or name is required");
+        }
 
-        Long employeeId=employeeRepository.findByUserId(userDetails.getUser_id()).getUserId();
-        EmployeeLeaveBalance getEmployeeBalance=employeeLeaveBalanceRepository.findByEmployeeIdAndLeaveTypeId(employeeId,leaveTypeId).get();
-        EmployeeLeaveBalance employeeLeaveBalance=new EmployeeLeaveBalance();
+        Employee employee = employeeRepository.findById(leaveRequestDTO.getEmployeeId())
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+        Integer employeeId = employee.getEmployeeId();
+        
+        EmployeeLeaveBalance existingBalance = employeeLeaveBalanceRepository
+                .findByEmployeeIdAndLeaveTypeId(employeeId, leaveTypeId)
+                .orElseThrow(() -> new RuntimeException("Leave balance not found for employee"));
+        
+        // Update the existing balance record instead of creating new one
+        int numberOfDays = leaveRequestDTO.getNumberOfDays() != null ? leaveRequestDTO.getNumberOfDays() : 0;
+        existingBalance.setUsedDays(existingBalance.getUsedDays() + numberOfDays);
+        existingBalance.setBalanceDays(existingBalance.getAllocatedDays() - existingBalance.getUsedDays());
 
-        employeeLeaveBalance.setEmployeeId(employeeId);
-        employeeLeaveBalance.setLeaveTypeId(leaveTypeId);
-        employeeLeaveBalance.setBalanceDays(getEmployeeBalance.getBalanceDays()-leaveRequestDTO.getNumberOfDays());
-
-        employeeLeaveBalanceRepository.save(employeeLeaveBalance);
-
-
+        employeeLeaveBalanceRepository.save(existingBalance);
     }
 
     //creating a employeeBalance record for a new employee
-    public void getOrCreateBalance(Integer employeeId) {
-        Long empId = employeeId.longValue();
+    public void createBalance(Integer empId) {
         List<LeaveType> leaveTypes = leaveTypeRepository.findAll();
 
         for (LeaveType leaveType : leaveTypes) {

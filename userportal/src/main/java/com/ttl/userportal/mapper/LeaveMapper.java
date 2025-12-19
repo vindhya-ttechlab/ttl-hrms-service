@@ -3,6 +3,7 @@ package com.ttl.userportal.mapper;
 import com.ttl.userportal.dto.LeaveRequestDTO;
 import com.ttl.userportal.entity.Employee;
 import com.ttl.userportal.entity.LeaveEntity;
+import com.ttl.userportal.entity.LeaveType;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -10,13 +11,36 @@ import java.time.LocalDateTime;
 
 @Component
 public class LeaveMapper {
+    public LeaveEntity mapToLeaveEntity(LeaveRequestDTO dto, Integer employeeId, 
+                                       Integer approverId, LocalDateTime appliedDate,
+                                       LeaveType leaveType) {
+        LeaveEntity leaveEntity = new LeaveEntity();
+        leaveEntity.setFromDate(LocalDate.parse(dto.getFromDate()));
+        leaveEntity.setToDate(LocalDate.parse(dto.getToDate()));
+        leaveEntity.setReason(dto.getReason());
+        leaveEntity.setLeaveTypeId(leaveType.getLeaveTypeId());
+        leaveEntity.setType(leaveType.getTypeName());
+        leaveEntity.setEmployeeId(employeeId);
+        leaveEntity.setApprover(approverId);
+        leaveEntity.setAppliedDate(appliedDate);
+        leaveEntity.setApprovedDate(dto.getApprovedDate());
+        leaveEntity.setIsActive(true);
+        leaveEntity.setLeaveStatus(dto.getLeaveStatus() != null ? dto.getLeaveStatus() : "Pending");
+        leaveEntity.setNumberOfDays(dto.getNumberOfDays());
+        leaveEntity.setDocumentUrl(dto.getDocumentUrl());
+        return leaveEntity;
+    }
 
+    /**
+     * Backward compatible method - uses type name from DTO
+     */
     public LeaveEntity mapToLeaveEntity(LeaveRequestDTO dto, Integer employeeId, 
                                        Integer approverId, LocalDateTime appliedDate) {
         LeaveEntity leaveEntity = new LeaveEntity();
         leaveEntity.setFromDate(LocalDate.parse(dto.getFromDate()));
         leaveEntity.setToDate(LocalDate.parse(dto.getToDate()));
         leaveEntity.setReason(dto.getReason());
+        leaveEntity.setLeaveTypeId(dto.getLeaveTypeId());
         leaveEntity.setType(dto.getType());
         leaveEntity.setEmployeeId(employeeId);
         leaveEntity.setApprover(approverId);
@@ -25,22 +49,24 @@ public class LeaveMapper {
         leaveEntity.setIsActive(true);
         leaveEntity.setLeaveStatus(dto.getLeaveStatus() != null ? dto.getLeaveStatus() : "Pending");
         leaveEntity.setNumberOfDays(dto.getNumberOfDays());
+        leaveEntity.setDocumentUrl(dto.getDocumentUrl());
         return leaveEntity;
     }
 
     /**
      * Updates existing LeaveEntity with data from LeaveRequestDTO
-     * @param leaveEntity Existing LeaveEntity
-     * @param dto LeaveRequestDTO with updated data
-     * @param employeeId Employee ID
-     * @param approverId Approver (manager) employee ID
      */
     public void updateLeaveEntity(LeaveEntity leaveEntity, LeaveRequestDTO dto, 
                                  Integer employeeId, Integer approverId) {
         leaveEntity.setFromDate(LocalDate.parse(dto.getFromDate()));
         leaveEntity.setToDate(LocalDate.parse(dto.getToDate()));
         leaveEntity.setReason(dto.getReason());
-        leaveEntity.setType(dto.getType());
+        if (dto.getLeaveTypeId() != null) {
+            leaveEntity.setLeaveTypeId(dto.getLeaveTypeId());
+        }
+        if (dto.getType() != null) {
+            leaveEntity.setType(dto.getType());
+        }
         leaveEntity.setEmployeeId(employeeId);
         leaveEntity.setApprover(approverId);
         leaveEntity.setAppliedDate(dto.getAppliedDate());
@@ -50,12 +76,11 @@ public class LeaveMapper {
             leaveEntity.setLeaveStatus(dto.getLeaveStatus());
         }
         leaveEntity.setNumberOfDays(dto.getNumberOfDays());
+        leaveEntity.setDocumentUrl(dto.getDocumentUrl());
     }
 
     /**
      * Maps LeaveEntity to LeaveRequestDTO
-     * @param leaveEntity LeaveEntity
-     * @return LeaveRequestDTO
      */
     public LeaveRequestDTO mapToLeaveRequestDTO(LeaveEntity leaveEntity) {
         LeaveRequestDTO dto = new LeaveRequestDTO();
@@ -63,6 +88,7 @@ public class LeaveMapper {
         dto.setFromDate(String.valueOf(leaveEntity.getFromDate()));
         dto.setToDate(String.valueOf(leaveEntity.getToDate()));
         dto.setReason(leaveEntity.getReason());
+        dto.setLeaveTypeId(leaveEntity.getLeaveTypeId());
         dto.setType(leaveEntity.getType());
         dto.setEmployeeId(leaveEntity.getEmployeeId());
         dto.setApprover(leaveEntity.getApprover());
@@ -72,6 +98,7 @@ public class LeaveMapper {
         dto.setLeaveStatus(leaveEntity.getLeaveStatus());
         dto.setNumberOfDays(leaveEntity.getNumberOfDays());
         dto.setComment(leaveEntity.getManagerComment());
+        dto.setDocumentUrl(leaveEntity.getDocumentUrl());
         return dto;
     }
 

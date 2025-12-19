@@ -3,7 +3,6 @@ package com.ttl.userportal.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -17,8 +16,13 @@ public class EmailDetails {
 
     private String senderEmail;
     private String receiverEmail;
+    
+    @Column(length = 500)
     private String subject;
+    
+    @Column(columnDefinition = "LONGTEXT")
     private String message;
+    
     private LocalDateTime sentDateTime;
 
 }

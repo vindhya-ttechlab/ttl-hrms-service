@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Data
 @Entity
-@Table(name = "role_permission_map",
+@Table(name = "role_privilege_map",
        uniqueConstraints = @UniqueConstraint(columnNames = {"role_id", "permission_id"}))
 public class RolePermissionMap {
 

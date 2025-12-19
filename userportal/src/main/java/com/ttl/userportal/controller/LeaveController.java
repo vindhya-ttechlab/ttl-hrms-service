@@ -84,7 +84,7 @@ public class LeaveController
             response.put("Data", "Leave Request Saved Successfully");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            response.put("Data", "Leave Request Save Failed");
+            response.put("Data", e.getMessage());
             return ResponseEntity.ok(response);
         }
     }

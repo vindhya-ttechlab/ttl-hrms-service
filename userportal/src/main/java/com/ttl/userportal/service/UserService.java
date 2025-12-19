@@ -16,6 +16,7 @@ import com.ttl.userportal.repository.UserRepository;
 import com.ttl.userportal.repository.UserRoleMapRepository;
 import com.ttl.userportal.repository.RoleRepository;
 import com.ttl.userportal.util.JwtUtil;
+import com.ttl.userportal.util.PasswordGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,15 +67,23 @@ public class UserService
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private EmailNotificationService emailNotificationService;
+
     @Value("${app.user.default.role.id:1}")
     private Integer defaultRoleId;
 
     @Value("${app.user.default.role.name:Employee}")
     private String defaultRoleName;
 
+    @Value("${app.email.template.new-user-welcome:NEW_USER_WELCOME}")
+    private String newUserWelcomeTemplate;
 
     @Autowired
     private LeaveTypeService leaveTypeService;
+
+    @Autowired
+    private AccountActivationService accountActivationService;
 
 
 
@@ -90,28 +99,39 @@ public class UserService
         if (existingEmployee != null) {
             throw new RuntimeException("Employee with email " + createUserRequest.getEmail() + " already exists");
         }
-        String encodedPassword = passwordEncoder.encode(createUserRequest.getPassword());
+        
+        // Generate a temporary random password (user will set their own via activation link)
+        String tempPassword = PasswordGenerator.generatePassword(16);
+        String encodedPassword = passwordEncoder.encode(tempPassword);
         
         Users user = userMapper.mapToUser(createUserRequest, encodedPassword);
         
         Users savedUser = userRepository.save(user);
         log.info("User saved with ID: {}", savedUser.getId());
         
-        Employee employee = userMapper.mapToEmployee(createUserRequest);
+        Employee employee = userMapper.mapToEmployee(savedUser);
         
         Employee savedEmployee = employeeRepository.save(employee);
         log.info("Employee saved with ID: {}", savedEmployee.getEmployeeId());
         
-        List<Integer> existingRoleIds = userRoleMapRepository.findActiveRoleIdsByUserId(savedUser.getId());
-        
-        if (existingRoleIds.isEmpty()) {
+        Integer existingRoleId = createUserRequest.getRoleId();
+        if (existingRoleId == null) {
             assignDefaultRoleFromProperties(savedUser.getId());
         } else {
-            log.info("User {} already has {} roles assigned, skipping default role assignment", 
-                    savedUser.getId(), existingRoleIds.size());
+            assignRoleToUser(savedUser.getId(), existingRoleId);
         }
 
-        leaveTypeService.getOrCreateBalance(savedEmployee.getEmployeeId());
+        leaveTypeService.createBalance(savedEmployee.getEmployeeId());
+        
+        // Generate activation token and send welcome email with activation link
+        try {
+            String activationUrl = accountActivationService.generateActivationToken(savedUser);
+            accountActivationService.sendActivationEmail(savedUser, activationUrl);
+            log.info("Activation email sent to user: {}", savedUser.getEmail());
+        } catch (Exception e) {
+            log.error("Failed to send activation email to user: {}. Error: {}", savedUser.getEmail(), e.getMessage());
+            // Don't fail the user creation if email fails
+        }
         
         return savedUser;
     }
@@ -119,18 +139,18 @@ public class UserService
     private void assignDefaultRoleFromProperties(Integer userId) {
         try {
             log.info("Assigning default role (ID: {}, Name: {}) to user ID: {}", defaultRoleId, defaultRoleName, userId);
-            
+
             // Get default role from application properties
             Role defaultRole = roleRepository.findById(defaultRoleId)
                     .orElseThrow(() -> new RuntimeException(
-                        String.format("Default role with ID %d (%s) not found. Please ensure roles are initialized in the database.", 
+                        String.format("Default role with ID %d (%s) not found. Please ensure roles are initialized in the database.",
                                 defaultRoleId, defaultRoleName)));
-            
+
             if (!defaultRoleName.equals(defaultRole.getRoleName())) {
-                log.warn("Default role name mismatch: Expected '{}', but found '{}'. Using role ID {} anyway.", 
+                log.warn("Default role name mismatch: Expected '{}', but found '{}'. Using role ID {} anyway.",
                         defaultRoleName, defaultRole.getRoleName(), defaultRoleId);
             }
-            
+
             // Check if user already has this role
             if (!userRoleMapRepository.existsByUserIdAndRoleId(userId, defaultRole.getRoleId())) {
                 UserRoleMap userRoleMap = new UserRoleMap();
@@ -139,12 +159,12 @@ public class UserService
                 userRoleMap.setIsActive(true);
                 userRoleMap.setCreatedAt(LocalDateTime.now());
                 userRoleMap.setUpdatedAt(LocalDateTime.now());
-                
+
                 userRoleMapRepository.save(userRoleMap);
-                log.info("Assigned default role '{}' (ID: {}) to user with ID: {}", 
+                log.info("Assigned default role '{}' (ID: {}) to user with ID: {}",
                         defaultRole.getRoleName(), defaultRole.getRoleId(), userId);
             } else {
-                log.info("User with ID {} already has role '{}' (ID: {})", 
+                log.info("User with ID {} already has role '{}' (ID: {})",
                         userId, defaultRole.getRoleName(), defaultRole.getRoleId());
             }
         } catch (Exception e) {
@@ -213,17 +233,12 @@ public class UserService
      * @param roleId The role ID
      */
     public void assignRoleToUser(Integer userId, Integer roleId) {
-        // Check if user exists
         if (!userRepository.existsById(userId)) {
             throw new RuntimeException("User with ID " + userId + " not found");
         }
-        
-        // Check if role exists
         if (!roleRepository.existsById(roleId)) {
             throw new RuntimeException("Role with ID " + roleId + " not found");
         }
-        
-        // Check if mapping already exists
         if (!userRoleMapRepository.existsByUserIdAndRoleId(userId, roleId)) {
             UserRoleMap userRoleMap = new UserRoleMap();
             userRoleMap.setUserId(userId);
@@ -485,5 +500,17 @@ public class UserService
         log.info("Password changed successfully for user ID: {}", userId);
         
         return true;
+    }
+
+    private void mappUserRole(Users users,Integer roleId)
+    {
+        UserRoleMap newRoleUserMap=new UserRoleMap();
+        newRoleUserMap.setRoleId(roleId);
+        newRoleUserMap.setUserId(users.getId());
+
+    }
+
+    public List<Role> getAllRoles() {
+        return roleRepository.findAll();
     }
 }

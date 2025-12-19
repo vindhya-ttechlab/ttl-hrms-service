@@ -30,7 +30,6 @@ public class ReimbursementController {
 
     @Autowired
     private ReimbursementService reimbursementService;
-
     /**
      * Get all active reimbursement categories
      */

@@ -25,8 +25,12 @@ public class LeaveEntity
     @Column(name = "Reason")
     private String reason;
 
+    // Reference to leave_types table
+    @Column(name = "leave_type_id")
+    private Integer leaveTypeId;
+
     @Column(name = "type")
-    private String type;
+    private String type; // Leave type name (for quick access without join)
 
     @Column(name = "employee_id")
     private Integer employeeId;
@@ -51,4 +55,7 @@ public class LeaveEntity
 
     @Column(name = "manager_comment")
     private String managerComment;
+
+    @Column(name = "document_url", length = 500)
+    private String documentUrl; // For medical certificates etc.
 }

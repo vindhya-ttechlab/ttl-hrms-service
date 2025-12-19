@@ -34,6 +34,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/users/login", "/users/create-user", "/api/users/create-user").permitAll()
+                .requestMatchers("/api/auth/activate/**").permitAll() // Account activation endpoints
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .anyRequest().authenticated()
             )

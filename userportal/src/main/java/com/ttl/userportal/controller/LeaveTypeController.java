@@ -23,7 +23,7 @@ public class LeaveTypeController {
     private LeaveTypeService leaveTypeService;
     
     @GetMapping
-    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
+//    @PreAuthorize("hasPermission('VIEW', 'LEAVE_TYPE')")
     public ResponseEntity<Map<String, Object>> getAllLeaveTypes(
             @RequestParam(required = false) Boolean includeInactive,
             @CurrentUser UserDetails userDetails) {
@@ -123,8 +123,8 @@ public class LeaveTypeController {
     {
         Map<String, Object> response = new HashMap<>();
         try {
-            leaveTypeService.getLeaveBalanceDetailsForUser(userDetails);
-            response.put("message", "Leave type deleted successfully");
+//            leaveTypeService.getLeaveBalanceDetailsForUser(userDetails);
+            response.put("DATA", leaveTypeService.getLeaveBalanceDetailsForUser(userDetails));
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("error", e.getMessage());

@@ -2,6 +2,7 @@ package com.ttl.userportal.dto;
 
 import lombok.Data;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 public class CreateUserRequest {
@@ -25,4 +26,7 @@ public class CreateUserRequest {
     private String skills;
     private String languages;
     private String achievement;
+    private Integer roleId;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
