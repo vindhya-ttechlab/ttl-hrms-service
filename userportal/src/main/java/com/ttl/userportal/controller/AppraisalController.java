@@ -1,9 +1,11 @@
 package com.ttl.userportal.controller;
 
 import com.ttl.userportal.config.CurrentUser;
+import com.ttl.userportal.dto.AppraisalManagerReviewDTO;
 import com.ttl.userportal.dto.AppraisalQuestionDTO;
 import com.ttl.userportal.dto.AppraisalTemplateDTO;
 import com.ttl.userportal.dto.EmployeeSelfAssessmentDTO;
+import com.ttl.userportal.entity.ManagerAppraisalReview;
 import com.ttl.userportal.service.AppraisalService;
 import com.ttl.userportal.util.constants.UserPortalConstants;
 import com.ttl.userportal.util.model.UserDetails;
@@ -11,6 +13,7 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -128,7 +131,10 @@ public class AppraisalController {
     public ResponseEntity<Map<String, Object>> getTemplateById(@RequestParam Long templateId,
                                                                @CurrentUser UserDetails userDetails) {
         Map<String, Object> response = new HashMap<>();
-
+        log.error("Authorities: {}",
+                SecurityContextHolder.getContext()
+                        .getAuthentication()
+                        .getAuthorities());
         try {
             response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
             response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FETCHED_SUCCESS_MESSAGE);
@@ -191,6 +197,21 @@ public class AppraisalController {
             response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
             response.put(UserPortalConstants.MESSAGE, UserPortalConstants.DELETED_SUCCESSFULLY);
             response.put(UserPortalConstants.DATA, "");
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/self-assessment/list")
+    public ResponseEntity<Map<String, Object>> getSelfAssessmentList(@CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FETCHED_SUCCESS_MESSAGE);
+            response.put(UserPortalConstants.DATA, appraisalService.getEmployeeSelfAssessmentList(userDetails));
             return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
         } catch (Exception e) {
             response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
@@ -264,4 +285,86 @@ public class AppraisalController {
             return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    @GetMapping("/self-appraisal-review/list")
+    public ResponseEntity<Map<String, Object>> getListSelfAppraisalReview(@CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            response.put(UserPortalConstants.DATA, appraisalService.getTeamSelfAssessments(userDetails));
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/self-assessment-review/getById")
+    public ResponseEntity<Map<String, Object>> getSelfAppraisalReview(
+            @RequestParam Long templateId,
+            @RequestParam Long employeeId,
+            @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            response.put(UserPortalConstants.DATA, appraisalService.getSelfAssessmentForReview(templateId, employeeId, userDetails));
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/self-assessment-review/getForEmployee")
+    public ResponseEntity<Map<String, Object>> getEmployeeSelfAppraisalReview(@RequestParam Long templateId,
+                                                                              @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            response.put(UserPortalConstants.DATA, appraisalService.getEmployeeSelfAssessmentReview(templateId, userDetails));
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/self-assessment-review/save")
+    public ResponseEntity<Map<String, Object>> saveSelfAssessmentReview(
+            @RequestBody AppraisalManagerReviewDTO appraisalManagerReviewDTO, @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            appraisalService.saveOrUpdateSelfAssessmentReview(appraisalManagerReviewDTO, userDetails);
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.CREATED_SUCCESSFULLY);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.CREATED);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/self-assessment-review/update")
+    public ResponseEntity<Map<String, Object>> updateSelfAssessmentReview(
+            @RequestBody AppraisalManagerReviewDTO appraisalManagerReviewDTO, @CurrentUser UserDetails userDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            appraisalService.saveOrUpdateSelfAssessmentReview(appraisalManagerReviewDTO, userDetails);
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.FALSE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.UPDATED_SUCCESSFULLY);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put(UserPortalConstants.HAS_ERROR, Boolean.TRUE);
+            response.put(UserPortalConstants.MESSAGE, UserPortalConstants.FAILURE_MESSAGE);
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
 }

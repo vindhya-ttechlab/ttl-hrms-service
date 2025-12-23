@@ -1,20 +1,16 @@
 package com.ttl.userportal.service;
 
-import com.ttl.userportal.dto.AppraisalQuestionDTO;
-import com.ttl.userportal.dto.AppraisalTemplateDTO;
-import com.ttl.userportal.dto.EmployeeAnswerDTO;
-import com.ttl.userportal.dto.EmployeeSelfAssessmentDTO;
-import com.ttl.userportal.entity.AppraisalQuestions;
-import com.ttl.userportal.entity.AppraisalTemplate;
-import com.ttl.userportal.entity.AppraisalTemplateQuestion;
-import com.ttl.userportal.entity.EmployeeAppraisalAnswer;
-import com.ttl.userportal.repository.AppraisalQuestionRepository;
-import com.ttl.userportal.repository.AppraisalTemplateQuestionRepository;
-import com.ttl.userportal.repository.AppraisalTemplateRepository;
-import com.ttl.userportal.repository.EmployeeAppraisalAnswerRepository;
+import com.ttl.userportal.dto.*;
+import com.ttl.userportal.entity.*;
+import com.ttl.userportal.repository.*;
 import com.ttl.userportal.util.constants.UserPortalConstants;
 import com.ttl.userportal.util.model.UserDetails;
 import io.micrometer.common.util.StringUtils;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import lombok.extern.log4j.Log4j2;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +21,11 @@ import java.util.stream.Collectors;
 
 @Component
 public class AppraisalService {
+
+    private static final Logger log = LogManager.getLogger(AppraisalService.class);
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Autowired
     private AppraisalQuestionRepository appraisalQuestionRepository;
 
@@ -36,6 +37,12 @@ public class AppraisalService {
 
     @Autowired
     private EmployeeAppraisalAnswerRepository employeeAppraisalAnswerRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ManagerAppraisalReviewRepository managerAppraisalReviewRepository;
 
     @Transactional
     public  List<AppraisalQuestionDTO> getQuestion(UserDetails userDetails){
@@ -205,7 +212,6 @@ public class AppraisalService {
 
         Long templateId = appraisalTemplate.getId();
 
-        // existing mappings
         List<AppraisalTemplateQuestion> existingMappings =
                 appraisalTemplateQuestionRepository
                         .findAllByTemplateIdAndRecordStatus(templateId, true);
@@ -229,9 +235,9 @@ public class AppraisalService {
         }
 
         for(Long existingQId : existingQuestionIds) {
-           if(!incomingQuestionIds.contains(existingQId)) {
-               deleteAppraisalTemplateQuestion(templateId, existingQId, userDetails);
-           }
+            if(!incomingQuestionIds.contains(existingQId)) {
+                deleteAppraisalTemplateQuestion(templateId, existingQId, userDetails);
+            }
         }
     }
 
@@ -244,9 +250,9 @@ public class AppraisalService {
             AppraisalTemplateQuestion appraisalTemplateQuestion = optional.get();
 
             if(!Boolean.TRUE.equals(appraisalTemplateQuestion.getRecordStatus())) {
-              appraisalTemplateQuestion.setRecordStatus(Boolean.TRUE);
-              appraisalTemplateQuestion.setCreatedAt(LocalDateTime.now());
-              appraisalTemplateQuestionRepository.save(appraisalTemplateQuestion);
+                appraisalTemplateQuestion.setRecordStatus(Boolean.TRUE);
+                appraisalTemplateQuestion.setCreatedAt(LocalDateTime.now());
+                appraisalTemplateQuestionRepository.save(appraisalTemplateQuestion);
             }
 
         } else {
@@ -290,19 +296,28 @@ public class AppraisalService {
     }
 
     @Transactional(readOnly = true)
+    public List<EmployeeSelfAssessmentDTO> getEmployeeSelfAssessmentList(UserDetails userDetails) {
+        List<EmployeeSelfAssessmentDTO> employeeSelfAssessmentDTOS = new ArrayList<>();
+        List<AppraisalTemplate> appraisalTemplateList = appraisalTemplateRepository.findAllByRecordStatus(true);
+        for(AppraisalTemplate appraisalTemplate : appraisalTemplateList){
+            employeeSelfAssessmentDTOS
+                    .add(getEmployeeSelfAssessment(appraisalTemplate.getId(), userDetails));
+        }
+        return employeeSelfAssessmentDTOS;
+    }
+
+    @Transactional(readOnly = true)
     public EmployeeSelfAssessmentDTO getEmployeeSelfAssessment(
             Long templateId,
             UserDetails userDetails) {
 
         Long userId = userDetails.getUser_id();
 
-        // 1. Validate template
         AppraisalTemplate template =
                 appraisalTemplateRepository
                         .findByIdAndRecordStatus(templateId, true)
                         .orElseThrow(() -> new RuntimeException("Template not found"));
 
-        // 2. Fetch template-question mappings
         List<AppraisalTemplateQuestion> mappings =
                 appraisalTemplateQuestionRepository
                         .findAllByTemplateIdAndRecordStatus(templateId, true);
@@ -311,13 +326,11 @@ public class AppraisalService {
 
         for (AppraisalTemplateQuestion mapping : mappings) {
 
-            // 3. Fetch question
             AppraisalQuestions question =
                     appraisalQuestionRepository
                             .findByIdAndRecordStatus(mapping.getQuestionId(), true)
                             .orElseThrow(() -> new RuntimeException("Question not found"));
 
-            // 4. Fetch answer (if exists)
             Optional<EmployeeAppraisalAnswer> answerOpt =
                     employeeAppraisalAnswerRepository
                             .findByTemplateIdAndQuestionIdAndUserId(
@@ -397,6 +410,7 @@ public class AppraisalService {
                 answer.setAnswerText(qa.getAnswerText());
                 answer.setUpdatedBy(userDetails.getFirst_name());
                 answer.setUpdatedAt(LocalDateTime.now());
+                answer.setRecordStatus(true);
             }
 
 
@@ -422,5 +436,199 @@ public class AppraisalService {
         employeeAppraisalAnswerRepository.save(answer);
     }
 
+    @Transactional
+    public List<ManagerSelfAssessmentListDTO> getTeamSelfAssessments(UserDetails userDetails){
+
+        String query =
+                """
+                        SELECT
+                            u.id            AS userId,
+                            u.name          AS userName,
+                            u.emp_code      AS empCode,
+                            u.email         AS userEmail,
+                            t.id            AS templateId,
+                            t.template_name AS templateName,
+                            r.id            AS reviewId
+                        FROM users u
+                        JOIN users m
+                            ON m.id = :managerUserId
+                        JOIN appraisal_template t
+                            ON t.record_status = 1
+                        LEFT JOIN manager_appraisal_review r
+                            ON r.employee_id = u.id
+                           AND r.manager_id  = :managerUserId
+                           AND r.template_id = t.id
+                           AND r.record_status = 1
+                        LEFT JOIN (
+                            SELECT DISTINCT user_id, template_id
+                            FROM employee_appraisal_answer
+                            WHERE record_status = 1
+                        ) a
+                            ON a.user_id = u.id
+                           AND a.template_id = t.id
+                        WHERE u.manager_id = m.id
+                          AND u.status = 'Active'
+                        ORDER BY u.id, t.id;
+                """;
+        List<Object[]> rows = entityManager
+                .createNativeQuery(query)
+                .setParameter("managerUserId", userDetails.getUser_id())
+                .getResultList();
+
+        return rows.stream()
+                .map(r -> {
+                    ManagerSelfAssessmentListDTO dto = new ManagerSelfAssessmentListDTO();
+                    dto.setEmployeeId(((Number) r[0]).longValue());
+                    dto.setEmployeeName((String) r[1]);
+                    dto.setEmployeeCode((String) r[2]);
+                    dto.setEmployeeEmailId((String) r[3]);
+                    dto.setTemplateId(((Number) r[4]).longValue());
+                    dto.setTemplateName((String) r[5]);
+                    dto.setReviewId(r[6] == null ? null : ((Number) r[6]).longValue());
+                    return dto;
+                })
+                .toList();
+
+    }
+
+    @Transactional
+    public AppraisalManagerReviewDTO getSelfAssessmentForReview(Long templateId, Long employeeId, UserDetails userDetails) {
+
+        Long managerId = userDetails.getUser_id();
+
+        Users employee = userRepository.findByIdAndStatus(employeeId.intValue(), Users.Status.Active);
+        if(employee == null || !employee.getManager().equals(managerId.intValue())){
+            throw new RuntimeException("Unauthorized access");
+        }
+
+        AppraisalTemplate template =
+                appraisalTemplateRepository
+                        .findByIdAndRecordStatus(templateId, true)
+                        .orElseThrow(() -> new RuntimeException("Template not found"));
+
+        ManagerAppraisalReview managerAppraisalReview = managerAppraisalReviewRepository
+                .findByTemplateIdAndEmployeeIdAndManagerIdAndRecordStatus(templateId, employeeId, managerId, true);
+
+        AppraisalManagerReviewDTO appraisalManagerReviewDTO = new AppraisalManagerReviewDTO();
+        appraisalManagerReviewDTO.setEmployeeId(employeeId);
+        appraisalManagerReviewDTO.setEmployeeName(employee.getName());
+
+        if(managerAppraisalReview != null) {
+            appraisalManagerReviewDTO.setReviewId(managerAppraisalReview.getId());
+            appraisalManagerReviewDTO.setReviewText(managerAppraisalReview.getReviewText());
+        } else {
+            appraisalManagerReviewDTO.setReviewId(null);
+            appraisalManagerReviewDTO.setReviewText("");
+        }
+
+        List<AppraisalTemplateQuestion> mappings =
+                appraisalTemplateQuestionRepository
+                        .findAllByTemplateIdAndRecordStatus(templateId, true);
+
+        List<EmployeeAnswerDTO> questionAnswerList = new ArrayList<>();
+
+        for (AppraisalTemplateQuestion mapping : mappings) {
+
+            AppraisalQuestions question =
+                    appraisalQuestionRepository
+                            .findByIdAndRecordStatus(mapping.getQuestionId(), true)
+                            .orElseThrow(() -> new RuntimeException("Question not found"));
+
+            Optional<EmployeeAppraisalAnswer> answerOpt =
+                    employeeAppraisalAnswerRepository
+                            .findByTemplateIdAndQuestionIdAndUserId(
+                                    templateId,
+                                    question.getId(),
+                                    employeeId
+                            );
+
+            EmployeeAnswerDTO dto = new EmployeeAnswerDTO();
+            dto.setQuestionId(question.getId());
+            dto.setQuestionText(question.getQuestionText());
+
+            if (answerOpt.isPresent()
+                    && Boolean.TRUE.equals(answerOpt.get().getRecordStatus())) {
+
+                dto.setAnswerId(answerOpt.get().getId());
+                dto.setAnswerText(answerOpt.get().getAnswerText());
+            }
+
+            questionAnswerList.add(dto);
+        }
+
+        EmployeeSelfAssessmentDTO response = new EmployeeSelfAssessmentDTO();
+        response.setTemplateId(template.getId());
+        response.setTemplateName(template.getTemplateName());
+        response.setQuestionAnswers(questionAnswerList);
+
+        appraisalManagerReviewDTO.setSelfAssessmentDTO(response);
+
+        return appraisalManagerReviewDTO;
+    }
+
+    @Transactional
+    public AppraisalManagerReviewDTO getEmployeeSelfAssessmentReview(Long templateId, UserDetails userDetails){
+        Long employeeId = userDetails.getUser_id();
+        Users employee = userRepository.findByIdAndStatus(employeeId.intValue(), Users.Status.Active);
+
+        ManagerAppraisalReview managerAppraisalReview = managerAppraisalReviewRepository
+                .findByTemplateIdAndEmployeeIdAndManagerIdAndRecordStatus(
+                        templateId,
+                        employeeId,
+                        employee.getManager().longValue(),
+                        true
+                );
+
+        AppraisalManagerReviewDTO appraisalManagerReviewDTO = new AppraisalManagerReviewDTO();
+
+        if(managerAppraisalReview != null) {
+            appraisalManagerReviewDTO.setReviewId(managerAppraisalReview.getId());
+            appraisalManagerReviewDTO.setReviewText(managerAppraisalReview.getReviewText());
+        } else {
+            appraisalManagerReviewDTO.setReviewId(null);
+            appraisalManagerReviewDTO.setReviewText("");
+        }
+    return  appraisalManagerReviewDTO;
+    }
+
+    @Transactional
+    public void saveOrUpdateSelfAssessmentReview(AppraisalManagerReviewDTO appraisalManagerReviewDTO, UserDetails userDetails){
+        Long managerId = userDetails.getUser_id();
+        Long employeeId = appraisalManagerReviewDTO.getEmployeeId();
+        Long templateId = appraisalManagerReviewDTO.getSelfAssessmentDTO().getTemplateId();
+
+        Users employee = userRepository.findByIdAndStatus(employeeId.intValue(), Users.Status.Active);
+        if (employee == null || !employee.getManager().equals(managerId.intValue())) {
+            throw new RuntimeException("Unauthorized access");
+        }
+
+        ManagerAppraisalReview managerAppraisalReview;
+        if(appraisalManagerReviewDTO.getReviewId() == null) {
+            managerAppraisalReview = ManagerAppraisalReview.builder()
+                    .managerId(managerId)
+                    .employeeId(employeeId)
+                    .reviewText(appraisalManagerReviewDTO.getReviewText())
+                    .recordStatus(Boolean.TRUE)
+                    .createdBy(userDetails.getFirst_name())
+                    .createdAt(LocalDateTime.now())
+                    .templateId(templateId)
+                    .build();
+        } else {
+            managerAppraisalReview = managerAppraisalReviewRepository.findByTemplateIdAndEmployeeIdAndManagerIdAndRecordStatus(
+                    templateId,
+                    employeeId,
+                    managerId,
+                    true
+            );
+            managerAppraisalReview.setId(appraisalManagerReviewDTO.getReviewId());
+            managerAppraisalReview.setReviewText(appraisalManagerReviewDTO.getReviewText());
+            managerAppraisalReview.setManagerId(managerId);
+            managerAppraisalReview.setTemplateId(templateId);
+            managerAppraisalReview.setEmployeeId(employeeId);
+            managerAppraisalReview.setUpdatedBy(userDetails.getFirst_name());
+            managerAppraisalReview.setUpdatedAt(LocalDateTime.now());
+        }
+        managerAppraisalReviewRepository.save(managerAppraisalReview);
+    }
 
 }
