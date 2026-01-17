@@ -15,10 +15,10 @@ import java.util.List;
 public class ReimbursementDTO {
     private Long reimbursementId;
     private Integer userId;
-    private String userName; // For display
+    private String userName;
     private String userEmail;
     private Integer categoryId;
-    private String categoryName; // For display
+    private String categoryName;
     private String title;
     private String description;
     private BigDecimal amount;
@@ -28,7 +28,7 @@ public class ReimbursementDTO {
     private String paymentMethod;
     private String status;
     private Integer approverId;
-    private String approverName; // For display
+    private String approverName;
     private String approverComment;
     private BigDecimal approvedAmount;
     private LocalDateTime appliedDate;

@@ -7,10 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Entity representing documents/receipts attached to a reimbursement claim
- * Supports multiple documents per reimbursement (receipts, invoices, etc.)
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -65,16 +61,5 @@ public class ReimbursementDocument {
     @JoinColumn(name = "reimbursement_id", insertable = false, updatable = false)
     private Reimbursement reimbursement;
 
-    /**
-     * Enum for document categories
-     */
-    public enum DocumentCategory {
-        RECEIPT,        // Payment receipt
-        INVOICE,        // Invoice/Bill
-        TICKET,         // Travel ticket
-        BOARDING_PASS,  // Boarding pass
-        HOTEL_VOUCHER,  // Hotel booking
-        OTHER           // Other supporting documents
-    }
 }
 

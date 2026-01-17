@@ -8,46 +8,62 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Entity representing reimbursement categories/types
- * Examples: Travel, Food, Medical, Equipment, Training, etc.
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "reimbursement_categories")
+@Table(name = "REIMBURSEMENT_CATEGORIES")
 public class ReimbursementCategory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "category_id")
+    @Column(name = "CATEGORY_ID")
     private Integer categoryId;
 
-    @Column(name = "category_name", nullable = false, unique = true, length = 100)
+    @Column(name = "CATEGORY_NAME", nullable = false, unique = true, length = 100)
     private String categoryName;
 
-    @Column(name = "description", length = 500)
+    @Column(name = "DESCRIPTION", length = 500)
     private String description;
 
-    @Column(name = "max_amount")
+    @Column(name = "MAX_AMOUNT")
     private BigDecimal maxAmount; // Maximum claimable amount per request
 
-    @Column(name = "requires_receipt", nullable = false)
+    @Column(name = "REQUIRES_RECEIPT", nullable = false)
     private Boolean requiresReceipt = true;
 
-    @Column(name = "requires_approval", nullable = false)
+    @Column(name = "REQUIRES_APPROVAL", nullable = false)
     private Boolean requiresApproval = true;
 
-    @Column(name = "is_active", nullable = false)
+    @Column(name = "IS_ACTIVE", nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "created_at", updatable = false,
-            columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    @Column(name = "CREATED_AT", updatable = false, nullable =false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at",
-            columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+
+        if (this.requiresReceipt == null) {
+            this.requiresReceipt = true;
+        }
+        if (this.requiresApproval == null) {
+            this.requiresApproval = true;
+        }
+        if (this.isActive == null) {
+            this.isActive = true;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }
 

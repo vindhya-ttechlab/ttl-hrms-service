@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReimbursementRequestDTO {
-    private Long reimbursementId; // Null for new, populated for update
+    private Long reimbursementId;
     private Integer categoryId;
     private String title;
     private String description;
@@ -23,8 +23,7 @@ public class ReimbursementRequestDTO {
     private LocalDate expenseDate;
     private String merchantName;
     private String paymentMethod;
-    private Boolean submitForApproval; // true = submit, false = save as draft
-    private Integer managerId; // optional override for approver (frontend read-only shows assigned manager)
-
+    private Boolean submitForApproval;
+    private Integer managerId;
 }
 

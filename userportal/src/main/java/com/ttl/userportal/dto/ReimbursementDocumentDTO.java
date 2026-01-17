@@ -16,11 +16,10 @@ public class ReimbursementDocumentDTO {
     private String documentUrl;
     private String documentType;
     private Long documentSize;
-    private String documentCategory; // RECEIPT, INVOICE, TICKET, etc.
+    private String documentCategory;
     private Boolean isVerified;
     private Integer verifiedBy;
     private LocalDateTime verifiedDate;
     private LocalDateTime uploadedAt;
-
 }
 

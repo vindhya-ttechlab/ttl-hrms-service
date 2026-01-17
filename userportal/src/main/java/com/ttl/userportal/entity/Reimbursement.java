@@ -1,5 +1,6 @@
 package com.ttl.userportal.entity;
 
+import com.ttl.userportal.enums.ReimbursementStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -10,9 +11,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Entity representing a reimbursement claim by an employee
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -44,25 +42,26 @@ public class Reimbursement {
     private String currency = "INR";
 
     @Column(name = "expense_date", nullable = false)
-    private LocalDate expenseDate; // Date when expense occurred
+    private LocalDate expenseDate;
 
     @Column(name = "merchant_name", length = 200)
-    private String merchantName; // Shop/Vendor name
+    private String merchantName;
 
     @Column(name = "payment_method", length = 50)
     private String paymentMethod; // Cash, Card, UPI, etc.
 
-    @Column(name = "status", nullable = false, length = 50)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private ReimbursementStatus status;
 
     @Column(name = "approver_id")
-    private Integer approverId; // Manager who approves
+    private Integer approverId;
 
     @Column(name = "approver_comment", length = 500)
     private String approverComment;
 
     @Column(name = "approved_amount", precision = 10, scale = 2)
-    private BigDecimal approvedAmount; // Can be different from claimed amount
+    private BigDecimal approvedAmount;
 
     @Column(name = "applied_date", nullable = false)
     private LocalDateTime appliedDate;
@@ -71,10 +70,10 @@ public class Reimbursement {
     private LocalDateTime approvedDate;
 
     @Column(name = "paid_date")
-    private LocalDateTime paidDate; // When amount was disbursed
+    private LocalDateTime paidDate;
 
     @Column(name = "payment_reference", length = 100)
-    private String paymentReference; // Transaction ID for payment
+    private String paymentReference;
 
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
@@ -112,23 +111,8 @@ public class Reimbursement {
     @JoinColumn(name = "approver_id", insertable = false, updatable = false)
     private Users approver;
 
-    @OneToMany(mappedBy = "reimbursement", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "reimbursement", cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE}, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<ReimbursementDocument> documents;
 
-    /**
-     * Enum for reimbursement status
-     */
-    public enum ReimbursementStatus {
-        DRAFT,          // Saved but not submitted
-        PENDING_MANAGER, // Submitted, awaiting approval
-
-        PENDING_HR,      // Approved by manager, awaiting HR processing
-        APPROVED,       // Approved by manager
-        REJECTED,       // Rejected by manager
-        PROCESSING,     // Being processed for payment
-        PAID,           // Amount disbursed
-        CANCELLED       // Cancelled by employee
-
-    }
 }
 
